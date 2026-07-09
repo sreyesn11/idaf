@@ -35,6 +35,33 @@ commands:
     timeout: 10
     enabled: true
 
+  - id: get_cpu_cores
+    name: Núcleos de CPU
+    description: Consulta la cantidad de núcleos de CPU disponibles (usada para calcular la carga relativa).
+    command: nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo
+    parser: text
+    category: sistema
+    timeout: 10
+    enabled: true
+
+  - id: get_lan_status
+    name: Estado de LAN
+    description: Consulta la interfaz LAN administrada por OpenWrt.
+    command: ubus call network.interface.lan status
+    parser: json
+    category: red
+    timeout: 10
+    enabled: true
+
+  - id: get_wan_status
+    name: Estado de WAN
+    description: Consulta la interfaz WAN administrada por OpenWrt.
+    command: ubus call network.interface.wan status
+    parser: json
+    category: red
+    timeout: 10
+    enabled: true
+
   - id: get_interfaces
     name: Interfaces de red
     description: Consulta interfaces IPv4 e IPv6.

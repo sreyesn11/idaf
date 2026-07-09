@@ -11,6 +11,7 @@ from core.constants import (
     CONNECTION_TEST_MARKER,
     SESSION_CONNECTION_CONFIG,
     SESSION_CONNECTION_STATUS,
+    SESSION_PASSWORD_WIDGET_KEY,
     SETTINGS_FILE,
 )
 from core.exceptions import RouterAppError
@@ -42,7 +43,7 @@ with st.form("connection_form"):
     host = st.text_input("Dirección IP o hostname", value="192.168.1.1")
     port = st.number_input("Puerto SSH", min_value=1, max_value=65535, value=22, step=1)
     username = st.text_input("Usuario", value="root")
-    password = st.text_input("Contraseña", type="password")
+    password = st.text_input("Contraseña", type="password", key=SESSION_PASSWORD_WIDGET_KEY)
     timeout = st.number_input("Timeout (segundos)", min_value=1, max_value=120, value=10, step=1)
     submitted = st.form_submit_button("Probar conexión")
 
@@ -67,7 +68,7 @@ if submitted:
 
             if CONNECTION_TEST_MARKER in output.stdout:
                 st.session_state[SESSION_CONNECTION_CONFIG] = config
-                st.session_state[SESSION_CONNECTION_STATUS] = "Conectado"
+                st.session_state[SESSION_CONNECTION_STATUS] = "Conexión validada"
                 st.success("Conexión exitosa.")
                 st.write(f"Host: `{config.host}` · Puerto: `{config.port}` · Usuario: `{config.username}`")
                 st.write(f"Tiempo de conexión: {elapsed:.2f} s")
@@ -89,3 +90,11 @@ if current_config is not None:
     st.caption(
         f"Conexión activa en esta sesión: {current_config.username}@{current_config.host}:{current_config.port}"
     )
+
+st.divider()
+if st.button("Limpiar credenciales"):
+    st.session_state.pop(SESSION_CONNECTION_CONFIG, None)
+    st.session_state[SESSION_CONNECTION_STATUS] = None
+    st.session_state.pop(SESSION_PASSWORD_WIDGET_KEY, None)
+    st.success("Se eliminaron la contraseña y la conexión activa de esta sesión.")
+    st.rerun()

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from core.constants import EVIDENCE_DIR
+from core.constants import EXECUTIONS_EVIDENCE_DIR
 from core.exceptions import ParserError, RouterAppError, SSHTimeoutError
 from core.ssh_client import SSHClient
 from models.command import CommandDefinition
@@ -36,7 +36,7 @@ _PARSERS: dict[str, BaseParser] = {
 class ExecutionService:
     """Orchestrates SSH execution, parsing, persistence and evidence generation for one command run."""
 
-    def __init__(self, repository: ExecutionRepository | None = None, evidence_dir: Path = EVIDENCE_DIR) -> None:
+    def __init__(self, repository: ExecutionRepository | None = None, evidence_dir: Path = EXECUTIONS_EVIDENCE_DIR) -> None:
         self._repository = repository or ExecutionRepository()
         self._evidence_dir = evidence_dir
 
@@ -69,9 +69,9 @@ class ExecutionService:
                 output = client.execute(command_def.command, timeout=command_def.timeout)
         except RouterAppError as exc:
             return self._finalize(self._build_error_result(base_fields, exc))
-        except Exception as exc:  # noqa: BLE001 - never let a raw traceback reach the UI
+        except Exception:  # noqa: BLE001 - never expose an uncontrolled exception's str() to the user
             logger.exception("Error inesperado ejecutando execution_id=%s", execution_id)
-            return self._finalize(self._build_error_result(base_fields, RouterAppError(str(exc))))
+            return self._finalize(self._build_error_result(base_fields, RouterAppError()))
 
         finished_at = datetime.now().astimezone()
         parsed_data, status, technical_message = self._parse_output(
@@ -138,8 +138,17 @@ class ExecutionService:
         return "La consulta finalizó con errores."
 
     def _finalize(self, result: ExecutionResult) -> ExecutionResult:
-        evidence_path = self._write_evidence(result)
-        self._repository.save(result, evidence_path=evidence_path)
+        evidence_path = None
+        try:
+            evidence_path = self._write_evidence(result)
+        except OSError:
+            logger.exception("No fue posible escribir la evidencia de la ejecución %s", result.execution_id)
+
+        try:
+            self._repository.save(result, evidence_path=evidence_path)
+        except Exception:  # noqa: BLE001 - persistence must never hide an already-computed result
+            logger.exception("No fue posible persistir la ejecución %s", result.execution_id)
+
         logger.info(
             "Fin de ejecución execution_id=%s estado=%s duracion=%s",
             result.execution_id,

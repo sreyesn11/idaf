@@ -5,7 +5,7 @@ import textwrap
 import pytest
 
 from core.command_service import CommandService
-from core.exceptions import CommandNotAllowedError
+from core.exceptions import CommandConfigurationError, CommandNotAllowedError
 
 SAMPLE_YAML = textwrap.dedent(
     """
@@ -40,11 +40,15 @@ SAMPLE_YAML = textwrap.dedent(
 )
 
 
+def _write(tmp_path, content: str):
+    commands_file = tmp_path / "commands.yaml"
+    commands_file.write_text(content, encoding="utf-8")
+    return commands_file
+
+
 @pytest.fixture()
 def command_service(tmp_path) -> CommandService:
-    commands_file = tmp_path / "commands.yaml"
-    commands_file.write_text(SAMPLE_YAML, encoding="utf-8")
-    return CommandService(commands_file=commands_file)
+    return CommandService(commands_file=_write(tmp_path, SAMPLE_YAML))
 
 
 def test_loads_only_enabled_commands(command_service: CommandService) -> None:
@@ -75,6 +79,82 @@ def test_get_by_id_rejects_disabled_command(command_service: CommandService) -> 
         command_service.get_by_id("disabled_command")
 
 
-def test_missing_file_returns_no_commands(tmp_path) -> None:
-    service = CommandService(commands_file=tmp_path / "missing.yaml")
-    assert service.list_commands() == []
+def test_missing_file_raises_configuration_error(tmp_path) -> None:
+    with pytest.raises(CommandConfigurationError):
+        CommandService(commands_file=tmp_path / "missing.yaml")
+
+
+def test_duplicate_ids_raise_configuration_error(tmp_path) -> None:
+    content = textwrap.dedent(
+        """
+        commands:
+          - id: get_uptime
+            name: Uno
+            description: ""
+            command: uptime
+            parser: uptime
+            category: sistema
+            enabled: true
+          - id: get_uptime
+            name: Dos
+            description: ""
+            command: uptime
+            parser: uptime
+            category: sistema
+            enabled: true
+        """
+    )
+    with pytest.raises(CommandConfigurationError):
+        CommandService(commands_file=_write(tmp_path, content))
+
+
+def test_invalid_parser_raises_configuration_error(tmp_path) -> None:
+    content = textwrap.dedent(
+        """
+        commands:
+          - id: bad_parser
+            name: Malo
+            description: ""
+            command: echo hola
+            parser: xml
+            category: sistema
+            enabled: true
+        """
+    )
+    with pytest.raises(CommandConfigurationError):
+        CommandService(commands_file=_write(tmp_path, content))
+
+
+def test_invalid_timeout_raises_configuration_error(tmp_path) -> None:
+    content = textwrap.dedent(
+        """
+        commands:
+          - id: bad_timeout
+            name: Malo
+            description: ""
+            command: echo hola
+            parser: text
+            category: sistema
+            timeout: 0
+            enabled: true
+        """
+    )
+    with pytest.raises(CommandConfigurationError):
+        CommandService(commands_file=_write(tmp_path, content))
+
+
+def test_zero_enabled_commands_raises_configuration_error(tmp_path) -> None:
+    content = textwrap.dedent(
+        """
+        commands:
+          - id: disabled_only
+            name: Deshabilitado
+            description: ""
+            command: echo hola
+            parser: text
+            category: sistema
+            enabled: false
+        """
+    )
+    with pytest.raises(CommandConfigurationError):
+        CommandService(commands_file=_write(tmp_path, content))

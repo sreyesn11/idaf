@@ -91,13 +91,20 @@ class SSHClient:
         started = time.monotonic()
         try:
             _stdin, stdout, stderr = self._client.exec_command(command, timeout=timeout)
-            exit_code = stdout.channel.recv_exit_status()
+            channel = stdout.channel
+            channel.settimeout(timeout)
             stdout_text = stdout.read().decode("utf-8", errors="replace")
             stderr_text = stderr.read().decode("utf-8", errors="replace")
         except socket.timeout as exc:
             raise SSHTimeoutError(f"El comando superó el tiempo máximo de {timeout}s.") from exc
         except paramiko.SSHException as exc:
             raise CommandExecutionError(str(exc)) from exc
+
+        # `recv_exit_status()` waits on an internal event with no timeout of its own
+        # and can hang forever if the exit status never arrives; bound it explicitly.
+        if not channel.status_event.wait(timeout):
+            raise SSHTimeoutError(f"El comando superó el tiempo máximo de {timeout}s esperando el código de salida.")
+        exit_code = channel.recv_exit_status()
         duration = time.monotonic() - started
 
         return CommandOutput(

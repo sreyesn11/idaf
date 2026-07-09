@@ -33,6 +33,14 @@ class CommandNotAllowedError(RouterAppError):
     friendly_message = "El comando no está autorizado."
 
 
+class CommandConfigurationError(RouterAppError):
+    friendly_message = "La configuración de comandos (config/commands.yaml) no es válida."
+
+
+class DiagnosticConfigurationError(RouterAppError):
+    friendly_message = "La configuración de umbrales de diagnóstico (config/diagnostic_thresholds.yaml) no es válida."
+
+
 class CommandExecutionError(RouterAppError):
     friendly_message = "Ocurrió un error al ejecutar el comando en el router."
 

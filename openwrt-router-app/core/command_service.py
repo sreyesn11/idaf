@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 
 from core.constants import COMMANDS_FILE
-from core.exceptions import CommandNotAllowedError
+from core.exceptions import CommandConfigurationError, CommandNotAllowedError
 from models.command import CommandDefinition
 
 
@@ -23,12 +24,39 @@ class CommandService:
     @staticmethod
     def _load_commands(commands_file: Path) -> list[CommandDefinition]:
         if not commands_file.exists():
-            return []
+            raise CommandConfigurationError(f"No se encontró el archivo de comandos: {commands_file}")
+
         with commands_file.open("r", encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
-        entries = raw.get("commands", [])
-        commands = [CommandDefinition.model_validate(entry) for entry in entries]
-        return [c for c in commands if c.enabled]
+        entries = raw.get("commands") or []
+
+        commands: list[CommandDefinition] = []
+        seen_ids: set[str] = set()
+        duplicate_ids: set[str] = set()
+        for index, entry in enumerate(entries):
+            try:
+                command = CommandDefinition.model_validate(entry)
+            except ValidationError as exc:
+                identifier = entry.get("id", f"índice {index}") if isinstance(entry, dict) else f"índice {index}"
+                raise CommandConfigurationError(
+                    f"Comando inválido ('{identifier}') en {commands_file.name}: {exc}"
+                ) from exc
+
+            if command.id in seen_ids:
+                duplicate_ids.add(command.id)
+            seen_ids.add(command.id)
+            commands.append(command)
+
+        if duplicate_ids:
+            raise CommandConfigurationError(
+                f"IDs de comando duplicados en {commands_file.name}: {', '.join(sorted(duplicate_ids))}"
+            )
+
+        enabled_commands = [c for c in commands if c.enabled]
+        if not enabled_commands:
+            raise CommandConfigurationError(f"No hay comandos habilitados (enabled: true) en {commands_file.name}.")
+
+        return enabled_commands
 
     def list_commands(self, category: str | None = None) -> list[CommandDefinition]:
         if category is None:

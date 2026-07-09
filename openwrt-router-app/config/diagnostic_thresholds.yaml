@@ -1,0 +1,28 @@
+router_general_health:
+  ssh:
+    warning_latency_ms: 800
+    critical_latency_ms: 2000
+
+  memory:
+    warning_percent: 75
+    critical_percent: 90
+
+  storage:
+    warning_percent: 80
+    critical_percent: 90
+
+  load:
+    warning_ratio_per_core: 0.70
+    critical_ratio_per_core: 1.00
+
+  uptime:
+    warning_seconds: 300
+
+  wan:
+    required: false
+
+  ipv6:
+    required: false
+
+  wifi:
+    required: false
