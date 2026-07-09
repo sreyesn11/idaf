@@ -1,0 +1,135 @@
+commands:
+  - id: get_system_board
+    name: Información general del router
+    description: Obtiene modelo, hostname, kernel y versión de OpenWrt.
+    command: ubus call system board
+    parser: json
+    category: sistema
+    timeout: 10
+    enabled: true
+
+  - id: get_uptime
+    name: Tiempo de actividad
+    description: Consulta el tiempo de actividad y carga del router.
+    command: uptime
+    parser: uptime
+    category: sistema
+    timeout: 10
+    enabled: true
+
+  - id: get_memory
+    name: Estado de memoria
+    description: Consulta el uso de memoria del sistema.
+    command: free
+    parser: free
+    category: sistema
+    timeout: 10
+    enabled: true
+
+  - id: get_disk_usage
+    name: Uso de almacenamiento
+    description: Consulta el uso del almacenamiento.
+    command: df -h
+    parser: df
+    category: sistema
+    timeout: 10
+    enabled: true
+
+  - id: get_interfaces
+    name: Interfaces de red
+    description: Consulta interfaces IPv4 e IPv6.
+    command: ip addr show
+    parser: text
+    category: red
+    timeout: 10
+    enabled: true
+
+  - id: get_ipv6_interfaces
+    name: Direcciones IPv6
+    description: Consulta las direcciones IPv6 configuradas.
+    command: ip -6 addr show
+    parser: text
+    category: red
+    timeout: 10
+    enabled: true
+
+  - id: get_ipv6_routes
+    name: Rutas IPv6
+    description: Consulta la tabla de enrutamiento IPv6.
+    command: ip -6 route show
+    parser: text
+    category: red
+    timeout: 10
+    enabled: true
+
+  - id: get_network_status
+    name: Estado de interfaces OpenWrt
+    description: Consulta el estado general de las interfaces administradas por OpenWrt.
+    command: ubus call network.interface dump
+    parser: json
+    category: red
+    timeout: 15
+    enabled: true
+
+  - id: get_wireless_status
+    name: Estado inalámbrico
+    description: Consulta radios e interfaces inalámbricas.
+    command: ubus call network.wireless status
+    parser: json
+    category: wifi
+    timeout: 15
+    enabled: true
+
+  - id: get_wireless_clients
+    name: Clientes inalámbricos
+    description: Consulta estaciones asociadas a las interfaces WiFi.
+    command: iwinfo
+    parser: text
+    category: wifi
+    timeout: 15
+    enabled: true
+
+  - id: get_processes
+    name: Procesos activos
+    description: Consulta procesos activos del router.
+    command: ps
+    parser: text
+    category: sistema
+    timeout: 10
+    enabled: true
+
+  - id: get_services
+    name: Servicios habilitados
+    description: Consulta servicios disponibles en init.d.
+    command: ls -1 /etc/init.d
+    parser: lines
+    category: sistema
+    timeout: 10
+    enabled: true
+
+  - id: get_listening_ports
+    name: Puertos en escucha
+    description: Consulta puertos TCP y UDP en escucha.
+    command: netstat -tuln 2>/dev/null || ss -tuln
+    parser: text
+    category: red
+    timeout: 10
+    enabled: true
+
+  - id: get_kernel_log
+    name: Últimos eventos del kernel
+    description: Consulta las últimas líneas del log del kernel.
+    command: dmesg | tail -n 50
+    parser: lines
+    category: logs
+    timeout: 10
+    enabled: true
+
+  - id: get_system_log
+    name: Últimos eventos del sistema
+    description: Consulta las últimas líneas del log del sistema.
+    command: logread | tail -n 50
+    parser: lines
+    category: logs
+    timeout: 10
+    enabled: true

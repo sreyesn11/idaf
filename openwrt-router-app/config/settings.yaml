@@ -1,0 +1,9 @@
+ssh:
+  # Valores posibles: auto | reject
+  # auto: acepta automáticamente claves de host desconocidas (solo laboratorio).
+  # reject: rechaza cualquier clave de host no registrada previamente.
+  host_key_policy: auto
+
+app:
+  name: "OpenWrt Router Diagnostic App"
+  version: "0.1.0"
