@@ -20,6 +20,7 @@ class ExecutionRecord(Base):
     command_id: Mapped[str] = mapped_column(String, index=True)
     command_name: Mapped[str] = mapped_column(String)
     category: Mapped[str] = mapped_column(String, index=True)
+    device_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     host: Mapped[str] = mapped_column(String)
     port: Mapped[int] = mapped_column(Integer)
     username: Mapped[str] = mapped_column(String)
@@ -45,13 +46,14 @@ class ExecutionRepository:
         init_db(self._engine)
         self._session_factory = get_session_factory(self._engine)
 
-    def save(self, result: ExecutionResult, evidence_path: Path | None = None) -> None:
+    def save(self, result: ExecutionResult, evidence_path: Path | None = None, device_id: int | None = None) -> None:
         with self._session_factory() as session:
             record = ExecutionRecord(
                 execution_id=result.execution_id,
                 command_id=result.command_id,
                 command_name=result.command_name,
                 category=result.category,
+                device_id=device_id,
                 host=result.host,
                 port=result.port,
                 username=result.username,
@@ -78,6 +80,7 @@ class ExecutionRepository:
         status: str | None = None,
         category: str | None = None,
         search: str | None = None,
+        device_id: int | None = None,
     ) -> list[ExecutionRecord]:
         with self._session_factory() as session:
             stmt = select(ExecutionRecord).order_by(ExecutionRecord.started_at.desc())
@@ -85,6 +88,8 @@ class ExecutionRepository:
                 stmt = stmt.where(ExecutionRecord.status == status)
             if category:
                 stmt = stmt.where(ExecutionRecord.category == category)
+            if device_id is not None:
+                stmt = stmt.where(ExecutionRecord.device_id == device_id)
             if search:
                 like = f"%{search}%"
                 stmt = stmt.where(

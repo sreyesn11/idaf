@@ -19,7 +19,9 @@ class DiagnosticRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     diagnostic_id: Mapped[str] = mapped_column(String, unique=True, index=True)
     diagnostic_type: Mapped[str] = mapped_column(String, index=True)
-    target: Mapped[str] = mapped_column(String)
+    device_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    target_device_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    target_host: Mapped[str] = mapped_column("target", String)
     state: Mapped[str] = mapped_column(String, index=True)
     summary: Mapped[str] = mapped_column(Text)
     started_at: Mapped[datetime] = mapped_column()
@@ -39,12 +41,19 @@ class DiagnosticRepository:
         init_db(self._engine)
         self._session_factory = get_session_factory(self._engine)
 
-    def save(self, result: RouterDiagnosticResult, evidence_path: Path | None = None) -> None:
+    def save(
+        self,
+        result: RouterDiagnosticResult,
+        evidence_path: Path | None = None,
+        device_id: int | None = None,
+    ) -> None:
         with self._session_factory() as session:
             record = DiagnosticRecord(
                 diagnostic_id=result.diagnostic_id,
                 diagnostic_type=result.diagnostic_type,
-                target=result.target,
+                device_id=device_id,
+                target_device_id=result.target_device_id,
+                target_host=result.target_host,
                 state=result.state.value,
                 summary=result.summary,
                 started_at=result.started_at,
@@ -58,19 +67,36 @@ class DiagnosticRepository:
             session.add(record)
             session.commit()
 
-    def list_all(self, state: str | None = None, search: str | None = None) -> list[DiagnosticRecord]:
+    def list_all(
+        self,
+        state: str | None = None,
+        search: str | None = None,
+        device_id: int | None = None,
+    ) -> list[DiagnosticRecord]:
         with self._session_factory() as session:
             stmt = select(DiagnosticRecord).order_by(DiagnosticRecord.started_at.desc())
             if state:
                 stmt = stmt.where(DiagnosticRecord.state == state)
+            if device_id is not None:
+                stmt = stmt.where(DiagnosticRecord.device_id == device_id)
             if search:
                 like = f"%{search}%"
-                stmt = stmt.where((DiagnosticRecord.target.like(like)) | (DiagnosticRecord.summary.like(like)))
+                stmt = stmt.where((DiagnosticRecord.target_host.like(like)) | (DiagnosticRecord.summary.like(like)))
             return list(session.scalars(stmt).all())
 
     def get_by_diagnostic_id(self, diagnostic_id: str) -> DiagnosticRecord | None:
         with self._session_factory() as session:
             stmt = select(DiagnosticRecord).where(DiagnosticRecord.diagnostic_id == diagnostic_id)
+            return session.scalars(stmt).first()
+
+    def get_latest_for_target(self, target_device_id: str) -> DiagnosticRecord | None:
+        with self._session_factory() as session:
+            stmt = (
+                select(DiagnosticRecord)
+                .where(DiagnosticRecord.target_device_id == target_device_id)
+                .order_by(DiagnosticRecord.started_at.desc())
+                .limit(1)
+            )
             return session.scalars(stmt).first()
 
     def delete_by_diagnostic_id(self, diagnostic_id: str) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from diagnostics.enums import DiagnosticState
 from diagnostics.router_health_service import RouterHealthService
 from diagnostics.thresholds import load_router_general_health_thresholds
+from events.event_repository import EventRepository
 from models.connection import ConnectionConfig
 from models.execution import ExecutionResult, ExecutionStatus
 from repositories.database import get_engine
@@ -27,6 +29,12 @@ def thresholds():
 def diagnostic_repository(tmp_path: Path) -> DiagnosticRepository:
     engine = get_engine(tmp_path / "history.db")
     return DiagnosticRepository(engine=engine)
+
+
+@pytest.fixture()
+def event_repository(tmp_path: Path) -> EventRepository:
+    engine = get_engine(tmp_path / "history.db")
+    return EventRepository(engine=engine)
 
 
 def _completed_execution(command_id: str, parsed_data: dict) -> ExecutionResult:
@@ -90,7 +98,9 @@ def _make_command_service_stub():
 
 def _make_execution_service_stub(parsed_data_by_command: dict[str, dict]):
     stub = MagicMock()
-    stub.run.side_effect = lambda connection, command: _completed_execution(command.id, parsed_data_by_command[command.id])
+    stub.run.side_effect = lambda connection, command, device_id=None: _completed_execution(
+        command.id, parsed_data_by_command[command.id]
+    )
     return stub
 
 
@@ -102,12 +112,13 @@ def _make_ssh_probe_ok(monkeypatch):
     monkeypatch.setattr("diagnostics.router_health_service.SSHClient", MagicMock(return_value=fake_client))
 
 
-def test_healthy_router_produces_healthy_diagnostic(monkeypatch, connection, thresholds, diagnostic_repository, tmp_path) -> None:
+def test_healthy_router_produces_healthy_diagnostic(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
     _make_ssh_probe_ok(monkeypatch)
     service = RouterHealthService(
         command_service=_make_command_service_stub(),
         execution_service=_make_execution_service_stub(_HEALTHY_PARSED_DATA),
         diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
         thresholds=thresholds,
         evidence_dir=tmp_path / "evidence",
     )
@@ -119,7 +130,7 @@ def test_healthy_router_produces_healthy_diagnostic(monkeypatch, connection, thr
     assert diagnostic_repository.list_all()
 
 
-def test_ssh_unreachable_short_circuits_other_checks(monkeypatch, connection, thresholds, diagnostic_repository, tmp_path) -> None:
+def test_ssh_unreachable_short_circuits_other_checks(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
     from core.exceptions import SSHConnectionError
 
     monkeypatch.setattr(
@@ -131,6 +142,7 @@ def test_ssh_unreachable_short_circuits_other_checks(monkeypatch, connection, th
         command_service=_make_command_service_stub(),
         execution_service=execution_service,
         diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
         thresholds=thresholds,
         evidence_dir=tmp_path / "evidence",
     )
@@ -141,7 +153,7 @@ def test_ssh_unreachable_short_circuits_other_checks(monkeypatch, connection, th
     execution_service.run.assert_not_called()
 
 
-def test_missing_command_is_reported_as_warning_not_a_crash(monkeypatch, connection, thresholds, diagnostic_repository, tmp_path) -> None:
+def test_missing_command_is_reported_as_warning_not_a_crash(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
     from core.exceptions import CommandNotAllowedError
 
     _make_ssh_probe_ok(monkeypatch)
@@ -151,6 +163,7 @@ def test_missing_command_is_reported_as_warning_not_a_crash(monkeypatch, connect
         command_service=command_service,
         execution_service=_make_execution_service_stub(_HEALTHY_PARSED_DATA),
         diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
         thresholds=thresholds,
         evidence_dir=tmp_path / "evidence",
     )
@@ -161,7 +174,7 @@ def test_missing_command_is_reported_as_warning_not_a_crash(monkeypatch, connect
     assert all(check.state == DiagnosticState.UNKNOWN for check in result.checks if check.check_id != "ssh")
 
 
-def test_parser_failure_yields_unknown_check_not_a_crash(monkeypatch, connection, thresholds, diagnostic_repository, tmp_path) -> None:
+def test_parser_failure_yields_unknown_check_not_a_crash(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
     _make_ssh_probe_ok(monkeypatch)
     broken_data = dict(_HEALTHY_PARSED_DATA)
     broken_data["get_memory"] = {}  # no 'total'/'used' -> memory rule can't compute a percentage
@@ -169,6 +182,7 @@ def test_parser_failure_yields_unknown_check_not_a_crash(monkeypatch, connection
         command_service=_make_command_service_stub(),
         execution_service=_make_execution_service_stub(broken_data),
         diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
         thresholds=thresholds,
         evidence_dir=tmp_path / "evidence",
     )
@@ -179,13 +193,14 @@ def test_parser_failure_yields_unknown_check_not_a_crash(monkeypatch, connection
     assert memory_check.state == DiagnosticState.UNKNOWN
 
 
-def test_persistence_failure_still_returns_result(monkeypatch, connection, thresholds, diagnostic_repository, tmp_path) -> None:
+def test_persistence_failure_still_returns_result(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
     _make_ssh_probe_ok(monkeypatch)
     diagnostic_repository.save = MagicMock(side_effect=RuntimeError("disco lleno"))
     service = RouterHealthService(
         command_service=_make_command_service_stub(),
         execution_service=_make_execution_service_stub(_HEALTHY_PARSED_DATA),
         diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
         thresholds=thresholds,
         evidence_dir=tmp_path / "evidence",
     )
@@ -195,7 +210,7 @@ def test_persistence_failure_still_returns_result(monkeypatch, connection, thres
     assert result.state == DiagnosticState.HEALTHY
 
 
-def test_evidence_write_failure_still_returns_result(monkeypatch, connection, thresholds, diagnostic_repository, tmp_path) -> None:
+def test_evidence_write_failure_still_returns_result(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
     _make_ssh_probe_ok(monkeypatch)
     # A regular file where a directory is expected makes mkdir(parents=True) raise OSError.
     blocker_file = tmp_path / "blocker"
@@ -204,6 +219,7 @@ def test_evidence_write_failure_still_returns_result(monkeypatch, connection, th
         command_service=_make_command_service_stub(),
         execution_service=_make_execution_service_stub(_HEALTHY_PARSED_DATA),
         diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
         thresholds=thresholds,
         evidence_dir=blocker_file / "diagnostics",
     )
@@ -212,3 +228,53 @@ def test_evidence_write_failure_still_returns_result(monkeypatch, connection, th
 
     assert result.state == DiagnosticState.HEALTHY
     assert diagnostic_repository.list_all()
+
+
+def test_state_change_between_runs_creates_event(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
+    _make_ssh_probe_ok(monkeypatch)
+    service = RouterHealthService(
+        command_service=_make_command_service_stub(),
+        execution_service=_make_execution_service_stub(_HEALTHY_PARSED_DATA),
+        diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
+        thresholds=thresholds,
+        evidence_dir=tmp_path / "evidence",
+    )
+    first = service.run(connection)
+    assert first.state == DiagnosticState.HEALTHY
+    assert event_repository.list_all() == []
+
+    critical_data = dict(_HEALTHY_PARSED_DATA)
+    critical_data["get_memory"] = {"total": 100000, "used": 95000, "free": 5000}
+    service_critical = RouterHealthService(
+        command_service=_make_command_service_stub(),
+        execution_service=_make_execution_service_stub(critical_data),
+        diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
+        thresholds=thresholds,
+        evidence_dir=tmp_path / "evidence",
+    )
+    second = service_critical.run(connection)
+
+    assert second.state == DiagnosticState.CRITICAL
+    events = event_repository.list_all()
+    assert len(events) == 1
+    assert events[0].from_state == DiagnosticState.HEALTHY.value
+    assert events[0].to_state == DiagnosticState.CRITICAL.value
+    assert events[0].target_device_id == first.target_device_id
+
+
+def test_unchanged_state_between_runs_creates_no_event(monkeypatch, connection, thresholds, diagnostic_repository, event_repository, tmp_path) -> None:
+    _make_ssh_probe_ok(monkeypatch)
+    service = RouterHealthService(
+        command_service=_make_command_service_stub(),
+        execution_service=_make_execution_service_stub(_HEALTHY_PARSED_DATA),
+        diagnostic_repository=diagnostic_repository,
+        event_repository=event_repository,
+        thresholds=thresholds,
+        evidence_dir=tmp_path / "evidence",
+    )
+    service.run(connection)
+    service.run(connection)
+
+    assert event_repository.list_all() == []

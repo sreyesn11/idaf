@@ -69,8 +69,9 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-La aplicación abrirá en el navegador con 5 secciones accesibles desde el
-menú lateral: Inicio, Conexión, Comandos, Historial, Diagnóstico y Acerca de.
+La aplicación abrirá en el navegador con 6 secciones accesibles desde el
+menú lateral (además de Inicio): Conexión, Comandos, Historial, Diagnóstico,
+Topología y Acerca de.
 
 ## 7. Estructura
 
@@ -78,15 +79,17 @@ menú lateral: Inicio, Conexión, Comandos, Historial, Diagnóstico y Acerca de.
 openwrt-router-app/
 ├── app.py                          # Página de Inicio (Streamlit)
 ├── pages/
-│   ├── 1_Conexion.py               # Configuración, prueba y limpieza de conexión SSH
+│   ├── 1_Conexion.py               # Registro de dispositivos, conexión/desconexión por sesión
 │   ├── 2_Comandos.py               # Selección/ejecución de comandos y resultado
-│   ├── 3_Historial.py              # Historial: pestañas Ejecuciones / Diagnósticos
-│   ├── 4_Diagnostico.py            # Diagnóstico general del router (Router General Health)
-│   └── 5_Acerca_de.py
+│   ├── 3_Historial.py              # Historial: pestañas Ejecuciones / Diagnósticos / Eventos
+│   ├── 4_Diagnostico.py            # Diagnóstico general (Router General Health), uno o varios dispositivos
+│   ├── 5_Topologia.py              # Topología mínima PC Desarrollo -> OpenWrt
+│   └── 6_Acerca_de.py
 ├── core/
 │   ├── ssh_client.py               # Conexión y ejecución SSH (Paramiko)
 │   ├── command_service.py          # Carga y valida config/commands.yaml
 │   ├── execution_service.py        # Orquesta SSH -> parser -> BD -> evidencia
+│   ├── concurrency.py              # Bloqueo por dispositivo (evita diagnósticos simultáneos sobre el mismo router)
 │   ├── logging_config.py           # Logging rotativo a logs/app.log
 │   ├── exceptions.py                # Jerarquía de excepciones propias
 │   └── constants.py
@@ -96,14 +99,22 @@ openwrt-router-app/
 │   ├── thresholds.py                # Carga config/diagnostic_thresholds.yaml
 │   ├── rules.py                     # Una regla por chequeo (SSH, memoria, LAN, WAN, ...)
 │   ├── consolidator.py              # Consolida el estado general del diagnóstico
-│   └── router_health_service.py     # Orquesta el diagnóstico completo
+│   └── router_health_service.py     # Orquesta el diagnóstico completo y detecta cambios de estado
+├── events/
+│   ├── models.py                    # StateChangeEvent
+│   └── event_repository.py          # Tabla `events`
+├── topology/
+│   ├── models.py                    # TopologyNode, TopologyLink, TopologyGraph
+│   ├── builder.py                   # Construye la topología mínima PC -> OpenWrt
+│   └── renderer.py                  # Renderiza la topología como SVG embebido (sin dependencias nuevas)
 ├── workflows/
 │   └── router_general_health.py     # Punto de entrada del workflow "Router General Health"
-├── models/                          # Modelos Pydantic (connection, command, execution)
+├── models/                          # Modelos Pydantic (connection, command, execution, device)
 ├── parsers/                         # Un parser por formato de salida
 ├── repositories/                    # Persistencia en SQLite (SQLAlchemy)
 │   ├── execution_repository.py      # Tabla `executions`
-│   └── diagnostic_repository.py     # Tabla `diagnostics` (independiente de `executions`)
+│   ├── diagnostic_repository.py     # Tabla `diagnostics` (independiente de `executions`)
+│   └── device_repository.py         # Tabla `devices` (registro de gateways, sin contraseña)
 ├── config/
 │   ├── commands.yaml                # Lista blanca de comandos permitidos
 │   ├── settings.yaml                # Política de host key SSH
@@ -148,26 +159,64 @@ relativa por núcleo, segundos mínimos de uptime, y si WAN/IPv6/Wi-Fi son
 obligatorias (`required: true|false`). Por defecto WAN, IPv6 y Wi-Fi no son
 obligatorias, ya que el laboratorio puede operar sin ellas en esta fase.
 
+### 8.4 Validación manual en el router
+
+Si el diagnóstico marca un chequeo como `UNKNOWN` o `FAILED`, estos son los
+mismos comandos que usa la app y que puedes correr directamente por SSH en el
+router para investigar la causa:
+
+```bash
+ubus call system board                       # identidad: hostname, modelo, kernel, release
+uptime                                       # uptime y load average
+free                                         # memoria usada/disponible
+df -h                                        # uso de almacenamiento por filesystem
+ubus call network.interface.lan status       # estado de la interfaz LAN
+ubus call network.interface.wan status       # estado de la interfaz WAN
+ip -6 addr show                              # direcciones IPv6 configuradas
+ubus call network.wireless status            # estado de las radios Wi-Fi
+/etc/init.d/dropbear status                  # estado del servidor SSH (dropbear)
+date                                         # hora/fecha del sistema, útil para correlacionar con evidencias
+```
+
+Recomendaciones de configuración del router para este laboratorio:
+
+- Hostname sugerido: `idaf-openwrt`.
+- Zona horaria sugerida: `America/Bogota`.
+- **Nunca** expongas el servicio SSH (dropbear) en la interfaz WAN; la
+  administración y el diagnóstico deben hacerse siempre desde la LAN.
+
 ## 9. Uso
 
-1. En **Conexión**, ingresa host, puerto, usuario, contraseña y timeout, y
-   presiona "Probar conexión". La contraseña solo vive en memoria durante
-   la sesión de Streamlit; el botón "Limpiar credenciales" la borra junto
-   con la conexión activa.
-2. En **Comandos**, filtra por categoría, selecciona un comando de la lista
-   blanca y presiona "Ejecutar". El resultado (estado, código de salida,
-   duración, stdout, stderr, datos estructurados) se muestra debajo, junto
-   con un botón para descargar la evidencia JSON.
-3. En **Diagnóstico**, presiona "Ejecutar diagnóstico" para correr
-   automáticamente el diagnóstico Router General Health: valida SSH y
-   evalúa identidad, uptime/carga, memoria, almacenamiento, LAN, WAN, IPv6
-   y Wi-Fi. Muestra el estado general, el detalle por chequeo y permite
+1. En **Conexión**, en la pestaña "Dispositivos guardados" registra uno o
+   varios gateways (alias, host, puerto, usuario — sin contraseña) y
+   presiona "Probar conexión" para cada uno con su contraseña de sesión; la
+   pestaña "Conexión rápida" permite una conexión puntual sin guardar. La
+   contraseña nunca se guarda en disco, solo vive en memoria durante la
+   sesión de Streamlit; "Limpiar todas las conexiones" borra todas las
+   conexiones activas de la sesión.
+2. En **Comandos**, elige el dispositivo activo entre los conectados, filtra
+   por categoría, selecciona un comando de la lista blanca y presiona
+   "Ejecutar". El resultado (estado, código de salida, duración, stdout,
+   stderr, datos estructurados) se muestra debajo, junto con un botón para
    descargar la evidencia JSON.
-4. En **Historial**, la pestaña "Ejecuciones" filtra por estado/categoría o
-   busca por comando; la pestaña "Diagnósticos" filtra por estado o busca
-   por host/resumen. Ambas permiten abrir el detalle, descargar evidencia,
-   eliminar registros individuales o limpiar todo el historial (con
-   confirmación).
+3. En **Diagnóstico**, selecciona uno o varios dispositivos conectados y
+   presiona "Ejecutar diagnóstico" para correr el diagnóstico Router General
+   Health sobre cada uno, en orden (nunca en paralelo sobre el mismo
+   dispositivo, para no saturarlo): valida SSH y evalúa identidad,
+   uptime/carga, memoria, almacenamiento, LAN, WAN, IPv6 y Wi-Fi. Cada
+   dispositivo muestra su propio estado general, detalle por chequeo y
+   evidencia JSON descargable, sin combinarse en una vista comparativa.
+4. En **Historial**, la pestaña "Ejecuciones" filtra por estado/categoría/
+   dispositivo o busca por comando; la pestaña "Diagnósticos" filtra por
+   estado/dispositivo o busca por host/resumen; la pestaña "Eventos" lista
+   los cambios de estado detectados entre diagnósticos consecutivos de un
+   mismo dispositivo (fecha, tipo, dispositivo, estado anterior, estado
+   nuevo, fuente). Las tres permiten limpiar su historial (con
+   confirmación); Ejecuciones y Diagnósticos también permiten abrir el
+   detalle, descargar evidencia y eliminar registros individuales.
+5. En **Topología**, elige un dispositivo guardado para ver la topología
+   mínima `PC Desarrollo -> OpenWrt`, coloreada según el estado de su último
+   diagnóstico (o `UNKNOWN` si todavía no se ha ejecutado ninguno).
 
 ## 10. Seguridad
 
@@ -178,8 +227,8 @@ obligatorias, ya que el laboratorio puede operar sin ellas en esta fase.
   destructivos.
 - La contraseña SSH nunca se guarda en SQLite, JSON, YAML, logs ni ningún
   otro almacenamiento persistente; solo permanece en `st.session_state`
-  durante la sesión activa de Streamlit, y puede borrarse manualmente con
-  el botón "Limpiar credenciales".
+  durante la sesión activa de Streamlit, y puede borrarse manualmente
+  desconectando el dispositivo o con "Limpiar todas las conexiones".
 - Los logs (`logs/app.log`) registran host, usuario, id de comando,
   duración y estado, pero nunca contraseñas ni credenciales.
 - Los errores se traducen siempre a un mensaje amigable; nunca se muestra
@@ -197,18 +246,26 @@ pytest -v
 
 Las pruebas cubren carga y validación de `commands.yaml` (incluyendo los
 casos de error de la sección 8.1), cada parser, los modelos Pydantic, el
-flujo de `ExecutionService`, las reglas de diagnóstico (`diagnostics/rules.py`),
-el consolidador de estado (`diagnostics/consolidator.py`), el
-`RouterHealthService` (con mocks: éxito, SSH inalcanzable, comando no
-disponible, fallo de parsing, fallo de persistencia y fallo de escritura de
-evidencia) y el `DiagnosticRepository`. Ninguna prueba abre una conexión SSH
-real: `SSHClient` se sustituye por un doble de prueba.
+flujo de `ExecutionService` y `ExecutionRepository`, las reglas de
+diagnóstico (`diagnostics/rules.py`), el consolidador de estado
+(`diagnostics/consolidator.py`), el `RouterHealthService` (con mocks: éxito,
+SSH inalcanzable, comando no disponible, fallo de parsing, fallo de
+persistencia, fallo de escritura de evidencia, y detección/no-detección de
+cambio de estado), el `DiagnosticRepository` (incluyendo
+`get_latest_for_target`), el registro de dispositivos (`DeviceRepository`,
+sin columna de contraseña), la migración idempotente de columnas
+(`repositories/database.py`), el bloqueo por dispositivo
+(`core/concurrency.py`), los eventos de cambio de estado (`EventRepository`)
+y el constructor de topología (`topology/builder.py`). Ninguna prueba abre
+una conexión SSH real: `SSHClient` se sustituye por un doble de prueba.
 
 ## 12. Limitaciones
 
 - Primera fase limitada al router OpenWrt: no incluye ESP32, Thread/
   OpenThread, MQTT, Prometheus, Grafana, ThingsBoard, health score,
-  machine learning, remediación automática ni múltiples routers.
+  machine learning ni remediación automática. Sí soporta administrar y
+  diagnosticar varios routers OpenWrt (registro de dispositivos), ejecutando
+  los diagnósticos de forma secuencial para no saturar ningún equipo.
 - No todos los comandos de `commands.yaml` están garantizados en todas las
   versiones/variantes de OpenWrt (por ejemplo, `iwinfo` o `ubus` pueden no
   estar disponibles según la imagen instalada); en ese caso la ejecución

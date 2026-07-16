@@ -26,7 +26,8 @@ class RouterDiagnosticResult(BaseModel):
 
     diagnostic_id: str
     diagnostic_type: str = "router_general_health"
-    target: str
+    target_device_id: str
+    target_host: str
     state: DiagnosticState
     summary: str
     started_at: datetime

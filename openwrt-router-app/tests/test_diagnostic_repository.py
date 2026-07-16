@@ -20,12 +20,14 @@ def repository(tmp_path: Path) -> DiagnosticRepository:
 def _make_result(
     diagnostic_id: str,
     state: DiagnosticState,
-    target: str = "192.168.1.1",
+    target_host: str = "192.168.1.1",
+    target_device_id: str = "lab-gateway-1",
     started_at: datetime = datetime(2026, 7, 9, 10, 0, 0),
 ) -> RouterDiagnosticResult:
     return RouterDiagnosticResult(
         diagnostic_id=diagnostic_id,
-        target=target,
+        target_device_id=target_device_id,
+        target_host=target_host,
         state=state,
         summary=f"resumen {state.value}",
         started_at=started_at,
@@ -42,6 +44,35 @@ def test_save_and_list_all(repository: DiagnosticRepository) -> None:
     records = repository.list_all()
     assert len(records) == 1
     assert records[0].diagnostic_id == "diag-1"
+    assert records[0].target_device_id == "lab-gateway-1"
+    assert records[0].target_host == "192.168.1.1"
+
+
+def test_get_latest_for_target(repository: DiagnosticRepository) -> None:
+    repository.save(
+        _make_result(
+            "diag-1", DiagnosticState.HEALTHY, target_device_id="lab-gateway-1", started_at=datetime(2026, 7, 9, 10, 0, 0)
+        )
+    )
+    repository.save(
+        _make_result(
+            "diag-2", DiagnosticState.WARNING, target_device_id="lab-gateway-1", started_at=datetime(2026, 7, 9, 11, 0, 0)
+        )
+    )
+    repository.save(
+        _make_result(
+            "diag-3", DiagnosticState.CRITICAL, target_device_id="lab-gateway-2", started_at=datetime(2026, 7, 9, 12, 0, 0)
+        )
+    )
+
+    latest = repository.get_latest_for_target("lab-gateway-1")
+
+    assert latest is not None
+    assert latest.diagnostic_id == "diag-2"
+
+
+def test_get_latest_for_target_missing_returns_none(repository: DiagnosticRepository) -> None:
+    assert repository.get_latest_for_target("no-existe") is None
 
 
 def test_get_by_diagnostic_id(repository: DiagnosticRepository) -> None:

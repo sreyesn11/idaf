@@ -47,3 +47,11 @@ class CommandExecutionError(RouterAppError):
 
 class ParserError(RouterAppError):
     friendly_message = "No fue posible interpretar la salida del comando."
+
+
+class DeviceAliasAlreadyExistsError(RouterAppError):
+    friendly_message = "Ya existe un dispositivo guardado con ese alias."
+
+
+class DeviceNotFoundError(RouterAppError):
+    friendly_message = "El dispositivo solicitado no existe en el registro."

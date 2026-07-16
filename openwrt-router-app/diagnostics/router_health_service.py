@@ -13,6 +13,7 @@ from core.exceptions import RouterAppError
 from core.execution_service import ExecutionService
 from core.ssh_client import SSHClient
 from diagnostics.consolidator import consolidate
+from diagnostics.enums import DiagnosticState
 from diagnostics.models import DiagnosticCheckResult, RouterDiagnosticResult
 from diagnostics.rules import (
     check_identity,
@@ -26,6 +27,8 @@ from diagnostics.rules import (
     check_wifi,
 )
 from diagnostics.thresholds import RouterGeneralHealthThresholds
+from events.event_repository import EventRepository
+from events.models import StateChangeEvent
 from models.connection import ConnectionConfig
 from models.execution import ExecutionResult
 from repositories.diagnostic_repository import DiagnosticRepository
@@ -60,15 +63,23 @@ class RouterHealthService:
         diagnostic_repository: DiagnosticRepository,
         thresholds: RouterGeneralHealthThresholds,
         evidence_dir: Path = DIAGNOSTICS_EVIDENCE_DIR,
+        event_repository: EventRepository | None = None,
     ) -> None:
         self._command_service = command_service
         self._execution_service = execution_service
         self._diagnostic_repository = diagnostic_repository
         self._thresholds = thresholds
         self._evidence_dir = evidence_dir
+        self._event_repository = event_repository or EventRepository()
 
-    def run(self, connection: ConnectionConfig) -> RouterDiagnosticResult:
+    def run(
+        self,
+        connection: ConnectionConfig,
+        device_id: int | None = None,
+        target_device_id: str | None = None,
+    ) -> RouterDiagnosticResult:
         diagnostic_id = self._new_diagnostic_id()
+        resolved_target_device_id = target_device_id or f"{connection.username}@{connection.host}"
         started_at = datetime.now().astimezone()
         warnings: list[str] = []
         evidence_execution_ids: list[str] = []
@@ -77,7 +88,7 @@ class RouterHealthService:
         checks: list[DiagnosticCheckResult] = [ssh_check]
 
         if ssh_ok:
-            execution_results = self._run_commands(connection, warnings)
+            execution_results = self._run_commands(connection, warnings, device_id=device_id)
             evidence_execution_ids = [r.execution_id for r in execution_results.values()]
 
             checks.append(check_identity(execution_results.get("get_system_board")))
@@ -111,7 +122,8 @@ class RouterHealthService:
 
         result = RouterDiagnosticResult(
             diagnostic_id=diagnostic_id,
-            target=connection.host,
+            target_device_id=resolved_target_device_id,
+            target_host=connection.host,
             state=state,
             summary=summary,
             started_at=started_at,
@@ -121,9 +133,11 @@ class RouterHealthService:
             evidence_execution_ids=evidence_execution_ids,
             warnings=warnings,
         )
-        return self._finalize(result)
+        return self._finalize(result, device_id=device_id)
 
-    def _run_commands(self, connection: ConnectionConfig, warnings: list[str]) -> dict[str, ExecutionResult]:
+    def _run_commands(
+        self, connection: ConnectionConfig, warnings: list[str], device_id: int | None = None
+    ) -> dict[str, ExecutionResult]:
         execution_results: dict[str, ExecutionResult] = {}
         for command_id in _DIAGNOSTIC_COMMAND_IDS:
             try:
@@ -131,7 +145,7 @@ class RouterHealthService:
             except RouterAppError as exc:
                 warnings.append(f"El comando '{command_id}' no está disponible: {exc.friendly_message}")
                 continue
-            execution_results[command_id] = self._execution_service.run(connection, command)
+            execution_results[command_id] = self._execution_service.run(connection, command, device_id=device_id)
         return execution_results
 
     def _check_ssh_access(self, connection: ConnectionConfig) -> tuple[DiagnosticCheckResult, bool]:
@@ -152,17 +166,35 @@ class RouterHealthService:
         today = datetime.now().strftime("%Y%m%d")
         return f"diag-{today}-{uuid.uuid4().hex[:8]}"
 
-    def _finalize(self, result: RouterDiagnosticResult) -> RouterDiagnosticResult:
+    def _finalize(self, result: RouterDiagnosticResult, device_id: int | None = None) -> RouterDiagnosticResult:
         evidence_path = None
         try:
             evidence_path = self._write_evidence(result)
         except OSError:
             logger.exception("No fue posible escribir la evidencia del diagnóstico %s", result.diagnostic_id)
 
+        previous = None
         try:
-            self._diagnostic_repository.save(result, evidence_path=evidence_path)
+            previous = self._diagnostic_repository.get_latest_for_target(result.target_device_id)
+        except Exception:  # noqa: BLE001 - a lookup failure must not block saving the new diagnostic
+            logger.exception("No fue posible consultar el diagnóstico previo de %s", result.target_device_id)
+
+        try:
+            self._diagnostic_repository.save(result, evidence_path=evidence_path, device_id=device_id)
         except Exception:  # noqa: BLE001 - persistence must never hide an already-computed result
             logger.exception("No fue posible persistir el diagnóstico %s", result.diagnostic_id)
+
+        if previous is not None and previous.state != result.state.value:
+            try:
+                event = StateChangeEvent(
+                    target_device_id=result.target_device_id,
+                    from_state=DiagnosticState(previous.state),
+                    to_state=result.state,
+                    timestamp=result.finished_at,
+                )
+                self._event_repository.save(event)
+            except Exception:  # noqa: BLE001 - event logging must never hide the diagnostic result
+                logger.exception("No fue posible registrar el evento de cambio de estado de %s", result.target_device_id)
 
         logger.info(
             "Diagnóstico finalizado diagnostic_id=%s estado=%s duracion=%s",

@@ -40,7 +40,12 @@ class ExecutionService:
         self._repository = repository or ExecutionRepository()
         self._evidence_dir = evidence_dir
 
-    def run(self, connection: ConnectionConfig, command_def: CommandDefinition) -> ExecutionResult:
+    def run(
+        self,
+        connection: ConnectionConfig,
+        command_def: CommandDefinition,
+        device_id: int | None = None,
+    ) -> ExecutionResult:
         execution_id = self._new_execution_id()
         started_at = datetime.now().astimezone()
 
@@ -68,10 +73,10 @@ class ExecutionService:
             with SSHClient(connection) as client:
                 output = client.execute(command_def.command, timeout=command_def.timeout)
         except RouterAppError as exc:
-            return self._finalize(self._build_error_result(base_fields, exc))
+            return self._finalize(self._build_error_result(base_fields, exc), device_id=device_id)
         except Exception:  # noqa: BLE001 - never expose an uncontrolled exception's str() to the user
             logger.exception("Error inesperado ejecutando execution_id=%s", execution_id)
-            return self._finalize(self._build_error_result(base_fields, RouterAppError()))
+            return self._finalize(self._build_error_result(base_fields, RouterAppError()), device_id=device_id)
 
         finished_at = datetime.now().astimezone()
         parsed_data, status, technical_message = self._parse_output(
@@ -90,7 +95,7 @@ class ExecutionService:
             user_message=self._user_message_for(status),
             technical_message=technical_message,
         )
-        return self._finalize(result)
+        return self._finalize(result, device_id=device_id)
 
     @staticmethod
     def _new_execution_id() -> str:
@@ -137,7 +142,7 @@ class ExecutionService:
             return "Consulta ejecutada, pero la salida no se pudo interpretar completamente."
         return "La consulta finalizó con errores."
 
-    def _finalize(self, result: ExecutionResult) -> ExecutionResult:
+    def _finalize(self, result: ExecutionResult, device_id: int | None = None) -> ExecutionResult:
         evidence_path = None
         try:
             evidence_path = self._write_evidence(result)
@@ -145,7 +150,7 @@ class ExecutionService:
             logger.exception("No fue posible escribir la evidencia de la ejecución %s", result.execution_id)
 
         try:
-            self._repository.save(result, evidence_path=evidence_path)
+            self._repository.save(result, evidence_path=evidence_path, device_id=device_id)
         except Exception:  # noqa: BLE001 - persistence must never hide an already-computed result
             logger.exception("No fue posible persistir la ejecución %s", result.execution_id)
 
