@@ -7,14 +7,12 @@ import streamlit as st
 import yaml
 
 from core.constants import (
-    APP_NAME,
     CONNECTION_TEST_COMMAND,
     CONNECTION_TEST_MARKER,
     SESSION_ADHOC_DEVICE_KEY,
     SESSION_CONNECTED_DEVICES,
     SETTINGS_FILE,
 )
-from core.branding import apply_branding
 from core.exceptions import RouterAppError
 from core.formatting import format_datetime
 from core.icons import ICONS
@@ -22,9 +20,6 @@ from core.ssh_client import SSHClient
 from models.connection import ConnectionConfig, HostKeyPolicy
 from models.device import ConnectedDevice, DeviceConfig
 from repositories.device_repository import DeviceRepository
-
-st.set_page_config(page_title=f"Conexión — {APP_NAME}", page_icon=ICONS["connection"], layout="wide")
-apply_branding()
 
 
 @st.cache_resource
@@ -64,8 +59,9 @@ def _to_device_config(record) -> DeviceConfig:
 def _test_and_connect(key: str, device_id: int | None, alias: str, config: ConnectionConfig) -> None:
     started = time.monotonic()
     try:
-        with SSHClient(config) as client:
-            output = client.execute(CONNECTION_TEST_COMMAND, timeout=config.timeout)
+        with st.spinner(f"Conectando con **{alias}** y validando…"):
+            with SSHClient(config) as client:
+                output = client.execute(CONNECTION_TEST_COMMAND, timeout=config.timeout)
         elapsed = time.monotonic() - started
 
         if CONNECTION_TEST_MARKER in output.stdout:
@@ -203,7 +199,10 @@ with tab_registry:
 
         with delete_col:
             st.markdown(f"**{ICONS['delete']} Eliminar**")
-            confirm_delete = st.checkbox("Confirmo que deseo eliminar este dispositivo", key=f"confirm_delete_{selected_device.id}")
+            confirm_delete = st.checkbox(
+                f"Confirmo que deseo eliminar **{selected_device.alias}** del registro. Esta acción no se puede deshacer.",
+                key=f"confirm_delete_{selected_device.id}",
+            )
             if st.button("Eliminar dispositivo", disabled=not confirm_delete, key=f"delete_{selected_device.id}"):
                 device_repository.delete(selected_device.id)
                 _connected_devices().pop(str(selected_device.id), None)

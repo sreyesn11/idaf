@@ -92,6 +92,9 @@ openwrt-router-app/
 │   ├── concurrency.py              # Bloqueo por dispositivo (evita diagnósticos simultáneos sobre el mismo router)
 │   ├── logging_config.py           # Logging rotativo a logs/app.log
 │   ├── exceptions.py                # Jerarquía de excepciones propias
+│   ├── branding.py                  # Fuente única de colores de estado, radios y CSS global (ver sección 14)
+│   ├── icons.py                     # Íconos de línea monocromos usados en la UI
+│   ├── formatting.py                # Formateo de fechas/valores para la UI
 │   └── constants.py
 ├── diagnostics/
 │   ├── enums.py                     # DiagnosticState
@@ -259,7 +262,24 @@ sin columna de contraseña), la migración idempotente de columnas
 y el constructor de topología (`topology/builder.py`). Ninguna prueba abre
 una conexión SSH real: `SSHClient` se sustituye por un doble de prueba.
 
-## 12. Limitaciones
+## 12. Diseño
+
+El proyecto usa el skill [Impeccable](https://impeccable.style/) (instalado
+en `.claude/skills/impeccable/`) para el trabajo de diseño de la interfaz
+Streamlit. `PRODUCT.md` y `DESIGN.md`, en la raíz del repo, documentan el
+contexto de producto y las decisiones visuales vigentes (paleta, tipografía,
+radios, tono) y sí se versionan en git aunque el resto de archivos `.md`
+esté excluido (ver `.gitignore`).
+
+Los colores de estado del diagnóstico (`HEALTHY/WARNING/DEGRADED/CRITICAL/
+UNREACHABLE/UNKNOWN`) viven en un único lugar, `core/branding.py`
+(`STATE_COLORS`, `STATE_TEXT_ON_LIGHT_COLORS`, `TEXT_COLOR`); tanto
+`state_badge()` como `topology/renderer.py` importan de ahí en vez de
+mantener copias duplicadas de la paleta. El texto sobre los colores de
+estado es siempre oscuro (`#1b1b1b`), no blanco, para cumplir contraste
+WCAG AA (≥4.5:1) en los cinco estados.
+
+## 13. Limitaciones
 
 - Primera fase limitada al router OpenWrt: no incluye ESP32, Thread/
   OpenThread, MQTT, Prometheus, Grafana, ThingsBoard, health score,
@@ -279,7 +299,7 @@ una conexión SSH real: `SSHClient` se sustituye por un doble de prueba.
   general se decide con una jerarquía de reglas fija (sección 9 del
   documento de diseño), no con machine learning ni remediación automática.
 
-## 13. Próximos pasos
+## 14. Próximos pasos
 
 Integración, en fases posteriores, con nodos ESP32, Thread/OpenThread,
 MQTT, Prometheus, Grafana y ThingsBoard, dentro de la arquitectura general

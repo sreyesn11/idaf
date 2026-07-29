@@ -4,8 +4,7 @@ import json
 
 import streamlit as st
 
-from core.branding import apply_branding, state_badge
-from core.constants import APP_NAME
+from core.branding import state_badge
 from core.formatting import format_datetime
 from core.icons import ICONS
 from diagnostics.enums import DiagnosticState
@@ -15,8 +14,6 @@ from repositories.device_repository import DeviceRepository
 from repositories.diagnostic_repository import DiagnosticRepository
 from repositories.execution_repository import ExecutionRepository
 
-st.set_page_config(page_title=f"Historial — {APP_NAME}", page_icon=ICONS["history"], layout="wide")
-apply_branding()
 
 
 @st.cache_resource
@@ -135,7 +132,12 @@ def _render_executions_tab() -> None:
             st.rerun()
 
     st.divider()
-    confirm_clear = st.checkbox("Confirmo que deseo eliminar todo el historial de ejecuciones", key="exec_confirm_clear")
+    total_executions = repository.stats()["total"]
+    confirm_clear = st.checkbox(
+        f"Confirmo que deseo eliminar las **{total_executions}** ejecuciones del historial "
+        "(no solo las filtradas arriba). Esta acción no se puede deshacer.",
+        key="exec_confirm_clear",
+    )
     if st.button(f"{ICONS['clear_all']} Limpiar historial de ejecuciones", disabled=not confirm_clear, key="exec_clear_button"):
         repository.clear_all()
         st.success("Historial de ejecuciones eliminado.")
@@ -228,7 +230,12 @@ def _render_diagnostics_tab() -> None:
             st.rerun()
 
     st.divider()
-    confirm_clear = st.checkbox("Confirmo que deseo eliminar todo el historial de diagnósticos", key="diag_confirm_clear")
+    total_diagnostics = repository.stats()["total"]
+    confirm_clear = st.checkbox(
+        f"Confirmo que deseo eliminar los **{total_diagnostics}** diagnósticos del historial "
+        "(no solo los filtrados arriba). Esta acción no se puede deshacer.",
+        key="diag_confirm_clear",
+    )
     if st.button(f"{ICONS['clear_all']} Limpiar historial de diagnósticos", disabled=not confirm_clear, key="diag_clear_button"):
         repository.clear_all()
         st.success("Historial de diagnósticos eliminado.")
@@ -259,7 +266,12 @@ def _render_events_tab() -> None:
     st.dataframe(table_rows, use_container_width=True, hide_index=True)
 
     st.divider()
-    confirm_clear = st.checkbox("Confirmo que deseo eliminar todo el historial de eventos", key="event_confirm_clear")
+    total_events = len(repository.list_all())
+    confirm_clear = st.checkbox(
+        f"Confirmo que deseo eliminar los **{total_events}** eventos del historial "
+        "(no solo los filtrados arriba). Esta acción no se puede deshacer.",
+        key="event_confirm_clear",
+    )
     if st.button(f"{ICONS['clear_all']} Limpiar historial de eventos", disabled=not confirm_clear, key="event_clear_button"):
         repository.clear_all()
         st.success("Historial de eventos eliminado.")

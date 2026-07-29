@@ -4,17 +4,13 @@ import json
 
 import streamlit as st
 
-from core.branding import apply_branding
 from core.command_service import CommandService
 from core.concurrency import get_device_lock_registry
-from core.constants import APP_NAME, SESSION_ACTIVE_DEVICE_KEY, SESSION_CONNECTED_DEVICES, SESSION_LAST_RESULT
+from core.constants import SESSION_ACTIVE_DEVICE_KEY, SESSION_CONNECTED_DEVICES, SESSION_LAST_RESULT
 from core.execution_service import ExecutionService
 from core.formatting import format_datetime
 from core.icons import ICONS
 from repositories.execution_repository import ExecutionRepository
-
-st.set_page_config(page_title=f"Comandos — {APP_NAME}", page_icon=ICONS["commands"], layout="wide")
-apply_branding()
 
 
 @st.cache_resource

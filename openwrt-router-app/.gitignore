@@ -6,7 +6,7 @@ __pycache__/
 *.egg-info/
 
 history.db
-streamlit_out.log
+streamlit_*.log
 
 evidence/executions/*
 !evidence/executions/.gitkeep

@@ -4,16 +4,13 @@ import json
 
 import streamlit as st
 
-from core.branding import apply_branding
+from core.branding import state_badge
 from core.concurrency import get_device_lock_registry
-from core.constants import APP_NAME, SESSION_CONNECTED_DEVICES, SESSION_DIAGNOSTIC_RESULTS
+from core.constants import SESSION_CONNECTED_DEVICES, SESSION_DIAGNOSTIC_RESULTS
 from core.exceptions import RouterAppError
 from core.formatting import format_datetime
 from core.icons import ICONS
 from workflows.router_general_health import run_router_general_health
-
-st.set_page_config(page_title=f"Diagnóstico — {APP_NAME}", page_icon=ICONS["diagnostics"], layout="wide")
-apply_branding()
 
 st.title(f"{ICONS['diagnostics']} Diagnóstico general del router")
 st.write(
@@ -72,22 +69,19 @@ st.subheader(f"{ICONS['list']} Resultados")
 if not results_store:
     st.info("Todavía no se ha ejecutado ningún diagnóstico en esta sesión.")
 else:
-    _STATE_RENDER = {
-        "HEALTHY": st.success,
-        "WARNING": st.warning,
-        "DEGRADED": st.warning,
-        "CRITICAL": st.error,
-        "UNREACHABLE": st.error,
-        "UNKNOWN": st.info,
-    }
-
     for key, diagnostic in results_store.items():
         device = connected.get(key)
         alias = device.alias if device is not None else diagnostic["target_device_id"]
 
         with st.expander(f"{ICONS['devices']} {alias} — {diagnostic['state']}", expanded=True):
-            render = _STATE_RENDER.get(diagnostic["state"], st.info)
-            render(f"Estado general: **{diagnostic['state']}**\n\n{diagnostic['summary']}")
+            # Same state_badge() pill Historial uses, not st.success/warning/error's
+            # built-in colors — those only have 4 visual treatments for the app's
+            # 6 diagnostic states, which collapsed DEGRADED into WARNING and
+            # UNREACHABLE into CRITICAL.
+            st.markdown(
+                f"**Estado general:** {state_badge(diagnostic['state'])}\n\n{diagnostic['summary']}",
+                unsafe_allow_html=True,
+            )
 
             col1, col2, col3 = st.columns(3)
             col1.metric(f"{ICONS['clock']} Duración (s)", diagnostic["duration_seconds"])

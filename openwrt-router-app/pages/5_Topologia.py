@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.branding import apply_branding
-from core.constants import APP_NAME
 from core.formatting import format_datetime
 from core.icons import ICONS
 from diagnostics.enums import DiagnosticState
@@ -11,9 +9,6 @@ from repositories.device_repository import DeviceRepository
 from repositories.diagnostic_repository import DiagnosticRepository
 from topology.builder import build_pc_to_router_topology
 from topology.renderer import render_topology
-
-st.set_page_config(page_title=f"Topología — {APP_NAME}", page_icon=ICONS["topology"], layout="wide")
-apply_branding()
 
 
 @st.cache_resource

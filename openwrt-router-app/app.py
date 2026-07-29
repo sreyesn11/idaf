@@ -100,4 +100,17 @@ def main() -> None:
     )
 
 
-main()
+# st.navigation()/st.Page(icon=...) instead of the classic auto-discovered
+# pages/ folder: it's the only supported way to put an icon next to each
+# section in the sidebar nav (page_icon only sets the browser tab favicon).
+pages = [
+    st.Page(main, title="Inicio", icon=ICONS["home"], default=True),
+    st.Page("pages/1_Conexion.py", title="Conexión", icon=ICONS["connection"]),
+    st.Page("pages/2_Comandos.py", title="Comandos", icon=ICONS["commands"]),
+    st.Page("pages/3_Historial.py", title="Historial", icon=ICONS["history"]),
+    st.Page("pages/4_Diagnostico.py", title="Diagnóstico", icon=ICONS["diagnostics"]),
+    st.Page("pages/5_Topologia.py", title="Topología", icon=ICONS["topology"]),
+    st.Page("pages/6_Acerca_de.py", title="Acerca de", icon=ICONS["about"]),
+]
+
+st.navigation(pages).run()

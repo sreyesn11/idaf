@@ -2,12 +2,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.branding import apply_branding
 from core.constants import APP_INTERNAL_NAME, APP_NAME, APP_VERSION
 from core.icons import ICONS
-
-st.set_page_config(page_title=f"Acerca de — {APP_NAME}", page_icon=ICONS["about"], layout="wide")
-apply_branding()
 
 st.title(f"{ICONS['about']} Acerca de")
 
