@@ -4,7 +4,7 @@ from pathlib import Path
 
 APP_NAME = "OpenWrt Router Diagnostic App"
 APP_INTERNAL_NAME = "openwrt-router-app"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0-dev"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -16,6 +16,7 @@ DIAGNOSTIC_THRESHOLDS_FILE = CONFIG_DIR / "diagnostic_thresholds.yaml"
 EVIDENCE_DIR = BASE_DIR / "evidence"
 EXECUTIONS_EVIDENCE_DIR = EVIDENCE_DIR / "executions"
 DIAGNOSTICS_EVIDENCE_DIR = EVIDENCE_DIR / "diagnostics"
+DISCOVERY_EVIDENCE_DIR = EVIDENCE_DIR / "discovery"
 LOGS_DIR = BASE_DIR / "logs"
 DATABASE_PATH = BASE_DIR / "history.db"
 

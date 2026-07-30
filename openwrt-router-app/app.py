@@ -110,6 +110,7 @@ pages = [
     st.Page("pages/3_Historial.py", title="Historial", icon=ICONS["history"]),
     st.Page("pages/4_Diagnostico.py", title="Diagnóstico", icon=ICONS["diagnostics"]),
     st.Page("pages/5_Topologia.py", title="Topología", icon=ICONS["topology"]),
+    st.Page("pages/7_Descubrimiento.py", title="Descubrimiento", icon=ICONS["discovery"]),
     st.Page("pages/6_Acerca_de.py", title="Acerca de", icon=ICONS["about"]),
 ]
 

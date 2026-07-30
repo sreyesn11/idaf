@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
@@ -11,6 +12,18 @@ from core.constants import DATABASE_PATH
 
 class Base(DeclarativeBase):
     pass
+
+
+def naive(value: datetime) -> datetime:
+    """Strips tzinfo for comparison against a datetime read back from SQLite.
+
+    SQLite has no native timezone-aware storage: SQLAlchemy's `DateTime`
+    column silently drops tzinfo on write, so a freshly-created
+    timezone-aware datetime (e.g. `datetime.now().astimezone()`) can't be
+    compared with `>`/`<` against a value just read from the DB without
+    this — comparing aware and naive datetimes raises `TypeError`.
+    """
+    return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
 
 def get_engine(database_path: Path = DATABASE_PATH) -> Engine:

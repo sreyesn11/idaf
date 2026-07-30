@@ -55,3 +55,15 @@ class DeviceAliasAlreadyExistsError(RouterAppError):
 
 class DeviceNotFoundError(RouterAppError):
     friendly_message = "El dispositivo solicitado no existe en el registro."
+
+
+class InventoryDeviceNotFoundError(RouterAppError):
+    friendly_message = "El dispositivo de inventario solicitado no existe."
+
+
+class DiscoveryFixtureError(RouterAppError):
+    friendly_message = "No fue posible cargar el fixture de descubrimiento simulado."
+
+
+class InvalidMergeError(RouterAppError):
+    friendly_message = "No es posible fusionar estos dos dispositivos."

@@ -11,6 +11,7 @@ ICONS: dict[str, str] = {
     "history": ":material/history:",
     "diagnostics": ":material/monitor_heart:",
     "topology": ":material/hub:",
+    "discovery": ":material/travel_explore:",
     "about": ":material/info:",
     # General concepts
     "devices": ":material/computer:",
@@ -38,6 +39,15 @@ ICONS: dict[str, str] = {
     "flag": ":material/flag:",
     "play": ":material/play_arrow:",
     "result": ":material/description:",
+    "inventory": ":material/inventory_2:",
+    "pending": ":material/hourglass_top:",
+    "approve": ":material/check_circle:",
+    "ignore_action": ":material/visibility_off:",
+    "restore": ":material/restore:",
+    "merge": ":material/call_merge:",
+    "conflict": ":material/report:",
+    "manual": ":material/edit_note:",
+    "gateway": ":material/router:",
     # Diagnostic checks
     "check_ssh": ":material/lock:",
     "check_identity": ":material/badge:",

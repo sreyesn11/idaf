@@ -1,0 +1,253 @@
+{
+  "collector_id": "collector-lab-network",
+  "collector_type": "SIMULATED_ROUTER",
+  "observed_at": "2026-07-29T18:00:00-05:00",
+  "observations": [
+    {
+      "observation_type": "DHCP_LEASE",
+      "source": "router-dhcp",
+      "observed_at": "2026-07-29T18:00:01-05:00",
+      "payload": {
+        "hostname": "idaf-server",
+        "mac": "DE:AD:BE:EF:00:01",
+        "ipv4": "192.168.1.10",
+        "device_type_hint": "SERVER",
+        "manufacturer_hint": "Generic"
+      }
+    },
+    {
+      "observation_type": "GATEWAY_REPORT",
+      "source": "openwrt-one-self-report",
+      "observed_at": "2026-07-29T18:00:02-05:00",
+      "payload": {
+        "hostname": "openwrt-one",
+        "agent_id": "idaf-openwrt-one",
+        "mac": "DE:AD:BE:EF:00:02",
+        "ipv4": "192.168.1.1",
+        "device_type_hint": "OPENWRT_ROUTER",
+        "manufacturer_hint": "OpenWrt"
+      }
+    },
+    {
+      "observation_type": "DHCP_LEASE",
+      "source": "router-dhcp",
+      "observed_at": "2026-07-29T18:00:03-05:00",
+      "payload": {
+        "hostname": "beagleplay-lab",
+        "mac": "DE:AD:BE:EF:00:03",
+        "ipv4": "192.168.1.20",
+        "device_type_hint": "BEAGLEPLAY",
+        "manufacturer_hint": "BeagleBoard.org"
+      }
+    },
+    {
+      "observation_type": "DHCP_LEASE",
+      "source": "router-dhcp",
+      "observed_at": "2026-07-29T18:00:04-05:00",
+      "payload": {
+        "hostname": "rpi-lab",
+        "mac": "DE:AD:BE:EF:00:04",
+        "ipv4": "192.168.1.21",
+        "device_type_hint": "RASPBERRY_PI",
+        "manufacturer_hint": "Raspberry Pi Foundation"
+      }
+    },
+    {
+      "observation_type": "GATEWAY_REPORT",
+      "source": "gw1-self-report",
+      "observed_at": "2026-07-29T18:00:05-05:00",
+      "payload": {
+        "hostname": "gw1",
+        "mac": "DE:AD:BE:EF:01:01",
+        "ipv4": "192.168.1.31",
+        "device_type_hint": "GATEWAY",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "GATEWAY_REPORT",
+      "source": "gw2-self-report",
+      "observed_at": "2026-07-29T18:00:06-05:00",
+      "payload": {
+        "hostname": "gw2",
+        "mac": "DE:AD:BE:EF:01:02",
+        "ipv4": "192.168.1.32",
+        "device_type_hint": "GATEWAY",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "GATEWAY_REPORT",
+      "source": "gw3-self-report",
+      "observed_at": "2026-07-29T18:00:07-05:00",
+      "payload": {
+        "hostname": "gw3",
+        "mac": "DE:AD:BE:EF:01:03",
+        "ipv4": "192.168.1.33",
+        "device_type_hint": "GATEWAY",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "GATEWAY_REPORT",
+      "source": "gw4-self-report",
+      "observed_at": "2026-07-29T18:00:08-05:00",
+      "payload": {
+        "hostname": "gw4",
+        "mac": "DE:AD:BE:EF:01:04",
+        "ipv4": "192.168.1.34",
+        "device_type_hint": "GATEWAY",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "THREAD_NODE_REPORT",
+      "source": "gw1-thread-children",
+      "observed_at": "2026-07-29T18:00:09-05:00",
+      "payload": {
+        "hostname": "esp32-c6-01",
+        "thread_ext_address": "0011223344550001",
+        "rloc16": "0x1001",
+        "device_type_hint": "ESP32_C6",
+        "manufacturer_hint": "Espressif",
+        "parent_hostname": "gw1"
+      }
+    },
+    {
+      "observation_type": "THREAD_NODE_REPORT",
+      "source": "gw1-thread-children",
+      "observed_at": "2026-07-29T18:00:10-05:00",
+      "payload": {
+        "hostname": "esp32-c6-02",
+        "thread_ext_address": "0011223344550002",
+        "rloc16": "0x1002",
+        "device_type_hint": "ESP32_C6",
+        "manufacturer_hint": "Espressif",
+        "parent_hostname": "gw1"
+      }
+    },
+    {
+      "observation_type": "THREAD_NODE_REPORT",
+      "source": "gw2-thread-children",
+      "observed_at": "2026-07-29T18:00:11-05:00",
+      "payload": {
+        "hostname": "esp32-c6-03",
+        "thread_ext_address": "0011223344550003",
+        "rloc16": "0x2001",
+        "device_type_hint": "ESP32_C6",
+        "manufacturer_hint": "Espressif",
+        "parent_hostname": "gw2"
+      }
+    },
+    {
+      "observation_type": "WIFI_CLIENT",
+      "source": "gw2-wifi-clients",
+      "observed_at": "2026-07-29T18:00:12-05:00",
+      "payload": {
+        "hostname": "monitor-luz",
+        "mac": "DE:AD:BE:EF:02:01",
+        "ipv4": "192.168.1.50",
+        "device_type_hint": "SENSOR",
+        "manufacturer_hint": "IDAF Lab",
+        "parent_hostname": "gw2"
+      }
+    },
+    {
+      "observation_type": "WIFI_CLIENT",
+      "source": "router-wifi-clients",
+      "observed_at": "2026-07-29T18:00:13-05:00",
+      "payload": {
+        "hostname": "iphone-visita",
+        "mac": "DE:AD:BE:EF:03:01",
+        "ipv4": "192.168.1.90",
+        "device_type_hint": "PHONE",
+        "manufacturer_hint": "Apple"
+      }
+    },
+    {
+      "observation_type": "DHCP_LEASE",
+      "source": "router-dhcp",
+      "observed_at": "2026-07-29T18:00:14-05:00",
+      "payload": {
+        "hostname": "sensor-dup",
+        "mac": "DE:AD:BE:EF:04:01",
+        "ipv4": "192.168.1.60",
+        "device_type_hint": "SENSOR",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "IPV6_NEIGHBOR",
+      "source": "router-ipv6-neighbors",
+      "observed_at": "2026-07-29T18:00:15-05:00",
+      "payload": {
+        "mac": "DE:AD:BE:EF:04:01",
+        "ipv6": [
+          "fd00:1daf::60"
+        ]
+      }
+    },
+    {
+      "observation_type": "MDNS_SERVICE",
+      "source": "router-mdns",
+      "observed_at": "2026-07-29T18:00:16-05:00",
+      "payload": {
+        "mdns_name": "sensor-dup.local",
+        "mac": "DE:AD:BE:EF:04:01"
+      }
+    },
+    {
+      "observation_type": "DHCP_LEASE",
+      "source": "router-dhcp",
+      "observed_at": "2026-07-29T18:00:17-05:00",
+      "payload": {
+        "hostname": "roamer",
+        "mac": "DE:AD:BE:EF:05:01",
+        "ipv4": "192.168.1.70",
+        "device_type_hint": "IOT_NODE",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "DHCP_LEASE",
+      "source": "router-dhcp",
+      "observed_at": "2026-07-29T18:05:00-05:00",
+      "payload": {
+        "hostname": "roamer",
+        "mac": "DE:AD:BE:EF:05:01",
+        "ipv4": "192.168.1.71",
+        "device_type_hint": "IOT_NODE",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "DHCP_LEASE",
+      "source": "router-dhcp",
+      "observed_at": "2026-07-29T18:00:18-05:00",
+      "payload": {
+        "hostname": "multi-v6",
+        "mac": "DE:AD:BE:EF:06:01",
+        "ipv4": "192.168.1.80",
+        "ipv6": [
+          "fd00:1daf::80:1",
+          "fd00:1daf::80:2",
+          "fe80::80"
+        ],
+        "device_type_hint": "IOT_NODE",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    },
+    {
+      "observation_type": "WIFI_CLIENT",
+      "source": "router-wifi-clients",
+      "observed_at": "2026-07-29T18:00:19-05:00",
+      "payload": {
+        "hostname": "ghost-node",
+        "mac": "DE:AD:BE:EF:07:01",
+        "ipv4": "192.168.1.95",
+        "device_type_hint": "IOT_NODE",
+        "manufacturer_hint": "IDAF Lab"
+      }
+    }
+  ]
+}

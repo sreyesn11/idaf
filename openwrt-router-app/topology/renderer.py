@@ -5,7 +5,7 @@ import html
 import streamlit as st
 import streamlit.components.v1 as components
 
-from core.branding import STATE_COLORS, STATE_TEXT_ON_LIGHT_COLORS, TEXT_COLOR
+from core.branding import STATE_COLORS, STATE_TEXT_ON_LIGHT_COLORS, TEXT_COLOR, state_badge
 from diagnostics.enums import DiagnosticState
 from topology.models import TopologyGraph
 
@@ -323,3 +323,51 @@ def render_topology(graph: TopologyGraph) -> None:
         use_container_width=True,
         hide_index=True,
     )
+
+
+def render_inventory_tree(graph: TopologyGraph) -> None:
+    """Render the inventory topology (arbitrary N devices, parent-child
+    links) as an indented tree.
+
+    Deliberately a plain-text/badge tree via `st.markdown`, not an extension
+    of the animated 2-node HTML diagram above: that template is hand-built
+    for exactly two nodes side by side, and stretching it to a variable-size
+    N-ary tree would mean rewriting its layout algorithm from scratch for a
+    marginal visual gain over a clear, native, zero-new-dependency tree.
+    """
+    if not graph.nodes:
+        st.info("No hay dispositivos para mostrar en la topología de inventario.")
+        return
+
+    children_by_parent: dict[str, list[str]] = {}
+    has_parent: set[str] = set()
+    for link in graph.links:
+        children_by_parent.setdefault(link.source, []).append(link.target)
+        has_parent.add(link.target)
+
+    nodes_by_id = {node.id: node for node in graph.nodes}
+    roots = [node.id for node in graph.nodes if node.id not in has_parent]
+
+    def _render_node(node_id: str, depth: int, visited: set[str]) -> None:
+        node = nodes_by_id.get(node_id)
+        if node is None or node_id in visited:
+            return
+        visited.add(node_id)
+        indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * depth
+        prefix = "└─ " if depth > 0 else ""
+        st.markdown(
+            f"{indent}{prefix}**{html.escape(node.label)}** &nbsp; {state_badge(node.state.value)}",
+            unsafe_allow_html=True,
+        )
+        for child_id in children_by_parent.get(node_id, []):
+            _render_node(child_id, depth + 1, visited)
+
+    rendered: set[str] = set()
+    for root_id in roots:
+        _render_node(root_id, 0, rendered)
+
+    # Nodes that are part of a link cycle (or otherwise never reached from a
+    # root) still get shown, flat, rather than silently dropped.
+    for node in graph.nodes:
+        if node.id not in rendered:
+            _render_node(node.id, 0, rendered)

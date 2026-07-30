@@ -14,6 +14,9 @@ evidence/executions/*
 evidence/diagnostics/*
 !evidence/diagnostics/.gitkeep
 
+evidence/discovery/*
+!evidence/discovery/.gitkeep
+
 logs/*
 !logs/.gitkeep
 

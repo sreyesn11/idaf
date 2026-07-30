@@ -9,19 +9,26 @@ OpenWrt: no se implementan todavía ESP32, Thread/OpenThread, MQTT,
 Prometheus, Grafana ni ThingsBoard, aunque la arquitectura queda preparada
 para integrarlos en fases posteriores.
 
-Versión actual: **v0.2.0 — Primer diagnóstico general del router OpenWrt**.
+Versión actual: **v0.3.0-dev — Descubrimiento automático (simulado) e inventario de dispositivos**.
 
 ## 1. Descripción
 
-La aplicación permite configurar una conexión SSH a un router OpenWrt,
-probar la conectividad, ejecutar comandos de diagnóstico predefinidos
-(nunca comandos libres), capturar y estructurar la salida, mostrarla en una
-interfaz Streamlit, y guardar tanto un historial en SQLite como evidencias
-en archivos JSON. Además de ejecutar comandos individuales, incluye un
-diagnóstico consolidado llamado **Router General Health**, que ejecuta
-varias consultas seguras, normaliza sus métricas, aplica reglas de umbral y
-devuelve un estado general (`HEALTHY`, `WARNING`, `DEGRADED`, `CRITICAL`,
-`UNREACHABLE` o `UNKNOWN`).
+La aplicación permite configurar una conexión SSH a uno o varios routers
+OpenWrt, probar la conectividad, ejecutar comandos de diagnóstico
+predefinidos (nunca comandos libres), capturar y estructurar la salida,
+mostrarla en una interfaz Streamlit, y guardar tanto un historial en SQLite
+como evidencias en archivos JSON. Incluye un diagnóstico consolidado
+llamado **Router General Health**, que ejecuta varias consultas seguras,
+normaliza sus métricas, aplica reglas de umbral y devuelve un estado
+general (`HEALTHY`, `WARNING`, `DEGRADED`, `CRITICAL`, `UNREACHABLE` o
+`UNKNOWN`).
+
+Desde v0.3.0-dev, además, incorpora un módulo de **descubrimiento e
+inventario de dispositivos** (sección 9 más abajo): un pipeline de
+colección → normalización → resolución de identidad → aprobación manual →
+inventario/topología, funcionando por ahora completamente sobre datos
+**simulados** (fixtures JSON), sin ningún escaneo o conexión de red real —
+ver `docs/discovery_architecture.md` para el detalle completo.
 
 ## 2. Requisitos
 
@@ -69,9 +76,9 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-La aplicación abrirá en el navegador con 6 secciones accesibles desde el
+La aplicación abrirá en el navegador con 7 secciones accesibles desde el
 menú lateral (además de Inicio): Conexión, Comandos, Historial, Diagnóstico,
-Topología y Acerca de.
+Topología, Descubrimiento y Acerca de.
 
 ## 7. Estructura
 
@@ -83,7 +90,8 @@ openwrt-router-app/
 │   ├── 2_Comandos.py               # Selección/ejecución de comandos y resultado
 │   ├── 3_Historial.py              # Historial: pestañas Ejecuciones / Diagnósticos / Eventos
 │   ├── 4_Diagnostico.py            # Diagnóstico general (Router General Health), uno o varios dispositivos
-│   ├── 5_Topologia.py              # Topología mínima PC Desarrollo -> OpenWrt
+│   ├── 5_Topologia.py              # Topología PC -> OpenWrt + árbol de inventario descubierto
+│   ├── 7_Descubrimiento.py         # Descubrimiento simulado, pendientes, inventario, conflictos, registro manual
 │   └── 6_Acerca_de.py
 ├── core/
 │   ├── ssh_client.py               # Conexión y ejecución SSH (Paramiko)
@@ -108,10 +116,18 @@ openwrt-router-app/
 │   └── event_repository.py          # Tabla `events`
 ├── topology/
 │   ├── models.py                    # TopologyNode, TopologyLink, TopologyGraph
-│   ├── builder.py                   # Construye la topología mínima PC -> OpenWrt
-│   └── renderer.py                  # Renderiza la topología como SVG embebido (sin dependencias nuevas)
+│   ├── builder.py                   # Topología PC -> OpenWrt y build_inventory_topology() (descubrimiento)
+│   └── renderer.py                  # Diagrama animado PC<->router + árbol de inventario (sin dependencias nuevas)
 ├── workflows/
 │   └── router_general_health.py     # Punto de entrada del workflow "Router General Health"
+├── discovery/                       # Descubrimiento e inventario (ver docs/discovery_architecture.md)
+│   ├── enums.py                     # DeviceDiscoveryStatus, IdentifierType, CorrelationStatus, ...
+│   ├── models.py                    # RawDiscoveryObservation, NormalizedObservation, IdentityResolution, ...
+│   ├── collectors/                  # DiscoveryCollector (Protocol), SimulatedDiscoveryCollector, fixtures/
+│   ├── normalization/               # validators.py + normalizer.py
+│   ├── correlation/                 # identity_resolver.py, duplicate_detector.py, merge_planner.py
+│   ├── services/                    # discovery_service.py, onboarding_service.py, inventory_service.py
+│   └── repositories/                # inventory_device, identifier, address, interface, observation, topology_link
 ├── models/                          # Modelos Pydantic (connection, command, execution, device)
 ├── parsers/                         # Un parser por formato de salida
 ├── repositories/                    # Persistencia en SQLite (SQLAlchemy)
@@ -124,7 +140,8 @@ openwrt-router-app/
 │   └── diagnostic_thresholds.yaml   # Umbrales del diagnóstico Router General Health
 ├── evidence/
 │   ├── executions/YYYY/MM/DD/<execution_id>.json
-│   └── diagnostics/YYYY/MM/DD/<diagnostic_id>.json
+│   ├── diagnostics/YYYY/MM/DD/<diagnostic_id>.json
+│   └── discovery/YYYY/MM/DD/<execution_id>.json
 ├── logs/                            # logs/app.log (rotativo)
 ├── tests/                           # Pruebas unitarias (pytest, sin SSH real)
 ├── requirements.txt
@@ -188,7 +205,43 @@ Recomendaciones de configuración del router para este laboratorio:
 - **Nunca** expongas el servicio SSH (dropbear) en la interfaz WAN; la
   administración y el diagnóstico deben hacerse siempre desde la LAN.
 
-## 9. Uso
+## 9. Descubrimiento e inventario (v0.3.0-dev)
+
+Módulo nuevo, sección de navegación **Descubrimiento**. Todo corre sobre
+datos **simulados** (fixtures JSON) — no hay escaneo ni conexión de red
+real todavía (ver `docs/simulated_discovery.md` y
+`docs/future_real_collectors.md`).
+
+Flujo: colector simulado → normalización → resolución de identidad → el
+dispositivo queda `PENDING_APPROVAL` → aprobación/edición/ignorar/fusión
+manual → inventario y topología. Un dispositivo descubierto **nunca** pasa
+a administrado automáticamente, y una coincidencia de IP sola **nunca**
+fusiona dos dispositivos (ver `docs/device_identity.md` para el algoritmo
+completo de resolución de identidad y sus umbrales de confianza).
+
+Pestañas de la página:
+
+- **Resumen**: conteos por estado, observaciones totales, conflictos de
+  identidad, posibles duplicados, y un botón para marcar como `STALE` los
+  dispositivos sin observar recientemente.
+- **Ejecutar descubrimiento**: elige un fixture de
+  `discovery/collectors/fixtures/`, lo corre, y muestra el resultado por
+  observación más la evidencia JSON descargable.
+- **Pendientes**: dispositivos recién descubiertos — aprobar tal cual,
+  editar y aprobar, o ignorar.
+- **Inventario**: todos los dispositivos, filtrables por estado.
+- **Ignorados**: permite restaurar un dispositivo ignorado.
+- **Conflictos y duplicados**: observaciones marcadas `IDENTITY_CONFLICT`
+  y pares de dispositivos que comparten un identificador, con fusión
+  manual confirmada (transaccional, con reversión si algo falla).
+- **Registro manual**: da de alta un dispositivo directamente como
+  `APPROVED`, sin pasar por el flujo de descubrimiento.
+
+La pestaña **Topología** (sección 5 de la estructura) se extendió con un
+árbol de inventario (dispositivos aprobados/pendientes y sus enlaces
+padre-hijo detectados), independiente del diagrama PC↔router existente.
+
+## 10. Uso
 
 1. En **Conexión**, en la pestaña "Dispositivos guardados" registra uno o
    varios gateways (alias, host, puerto, usuario — sin contraseña) y
@@ -221,7 +274,7 @@ Recomendaciones de configuración del router para este laboratorio:
    mínima `PC Desarrollo -> OpenWrt`, coloreada según el estado de su último
    diagnóstico (o `UNKNOWN` si todavía no se ha ejecutado ninguno).
 
-## 10. Seguridad
+## 11. Seguridad
 
 - Solo se permiten comandos predefinidos en `config/commands.yaml`; no hay
   entrada de comandos libres ni concatenación de comandos con datos del
@@ -241,7 +294,7 @@ Recomendaciones de configuración del router para este laboratorio:
   resultado ya calculado (de una ejecución o de un diagnóstico) igual se
   muestra en la interfaz; el fallo solo se registra en el log.
 
-## 11. Pruebas
+## 12. Pruebas
 
 ```bash
 pytest -v
@@ -262,7 +315,18 @@ sin columna de contraseña), la migración idempotente de columnas
 y el constructor de topología (`topology/builder.py`). Ninguna prueba abre
 una conexión SSH real: `SSHClient` se sustituye por un doble de prueba.
 
-## 12. Diseño
+El módulo de descubrimiento agrega su propia suite (61 pruebas, sin red
+real): normalización (MAC/IPv4/IPv6/hostname/Thread/timestamps válidos e
+inválidos), resolución de identidad (todos los casos de la sección 8.3 de
+la spec: coincidencia fuerte/media/débil, conflicto, dispositivo manual
+detectado después), persistencia (identificadores, direcciones IPv4/IPv6,
+fusión transaccional con prueba de reversión ante fallo), el flujo completo
+de `DiscoveryService` contra el fixture simulado (incluyendo idempotencia
+al correrlo dos veces), el flujo de aprobación/ignorar/restaurar/fusionar,
+y `build_inventory_topology()` (dispositivos ignorados nunca aparecen,
+enlaces requieren ambos extremos visibles).
+
+## 13. Diseño
 
 El proyecto usa el skill [Impeccable](https://impeccable.style/) (instalado
 en `.claude/skills/impeccable/`) para el trabajo de diseño de la interfaz
@@ -279,7 +343,7 @@ mantener copias duplicadas de la paleta. El texto sobre los colores de
 estado es siempre oscuro (`#1b1b1b`), no blanco, para cumplir contraste
 WCAG AA (≥4.5:1) en los cinco estados.
 
-## 13. Limitaciones
+## 14. Limitaciones
 
 - Primera fase limitada al router OpenWrt: no incluye ESP32, Thread/
   OpenThread, MQTT, Prometheus, Grafana, ThingsBoard, health score,
@@ -298,9 +362,18 @@ WCAG AA (≥4.5:1) en los cinco estados.
 - El diagnóstico no calcula un "health score" ni promedio: el estado
   general se decide con una jerarquía de reglas fija (sección 9 del
   documento de diseño), no con machine learning ni remediación automática.
+- El descubrimiento de dispositivos (sección 9) es completamente
+  **simulado**: no hay VPN, acceso SSH confirmado al Linksys, ni
+  confirmación de qué herramientas de descubrimiento soporta su firmware
+  (ver `docs/simulated_discovery.md` y `docs/future_real_collectors.md`).
+  No implementa Thread/OpenThread, MQTT, Prometheus, Grafana ni
+  ThingsBoard — el tipo de observación `THREAD_NODE_REPORT` existe solo
+  para validar que el modelo de datos ya los soporta.
 
-## 14. Próximos pasos
+## 15. Próximos pasos
 
-Integración, en fases posteriores, con nodos ESP32, Thread/OpenThread,
-MQTT, Prometheus, Grafana y ThingsBoard, dentro de la arquitectura general
-de observabilidad de la tesis.
+Integración, en fases posteriores, con un colector de descubrimiento real
+(empezando por reportes de gateway vía SSH — ver
+`docs/future_real_collectors.md`), nodos ESP32, Thread/OpenThread, MQTT,
+Prometheus, Grafana y ThingsBoard, dentro de la arquitectura general de
+observabilidad de la tesis.

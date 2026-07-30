@@ -2,6 +2,8 @@
 !README.md
 !PRODUCT.md
 !DESIGN.md
+!CHANGELOG.md
+!docs/*.md
 
 # impeccable-ignore-start
 # Ephemeral output, runtime state, and per-dev overrides.
