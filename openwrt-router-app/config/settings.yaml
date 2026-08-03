@@ -7,3 +7,25 @@ ssh:
 app:
   name: "OpenWrt Router Diagnostic App"
   version: "0.1.0"
+
+discovery:
+  enabled: true
+  # simulated: lee fixtures JSON (por defecto). windows_local: colector real
+  # vía PowerShell sobre la interfaz Ethernet local. No cambiar el default
+  # sin selección explícita.
+  mode: simulated
+  interface_alias: Ethernet
+  interface_index: 23
+  allow_active_enrichment: false
+  allowed_probe_ports:
+    - 22
+    - 80
+    - 443
+  # 5s (el valor de ejemplo del documento de especificación) resultó
+  # insuficiente en la práctica: el arranque del proceso powershell.exe
+  # puede tomar varios segundos incluso en una máquina real, y una corrida
+  # con varios vecinos requiere varias invocaciones. 15s da margen sin
+  # arriesgar que un botón quede "colgado" indefinidamente.
+  command_timeout_seconds: 15
+  max_parallel_probes: 3
+  retain_failed_observations: true

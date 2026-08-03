@@ -33,6 +33,7 @@ class DeviceType(str, Enum):
     ESP32 = "ESP32"
     ESP32_C6 = "ESP32_C6"
     IOT_NODE = "IOT_NODE"
+    IOT_GATEWAY = "IOT_GATEWAY"
     SENSOR = "SENSOR"
     PHONE = "PHONE"
     UNKNOWN = "UNKNOWN"
@@ -74,6 +75,7 @@ class CollectorType(str, Enum):
     SIMULATED_WIFI = "SIMULATED_WIFI"
     SIMULATED_MDNS = "SIMULATED_MDNS"
     SIMULATED_THREAD = "SIMULATED_THREAD"
+    WINDOWS_NEIGHBOR = "WINDOWS_NEIGHBOR"
 
 
 class LinkType(str, Enum):

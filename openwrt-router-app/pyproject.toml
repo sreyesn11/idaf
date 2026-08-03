@@ -17,3 +17,7 @@ dev = ["pytest>=8.0"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "windows_discovery_integration: hits real PowerShell/local network, skipped by default (spec doc 03 section 13)",
+]
+addopts = '-m "not windows_discovery_integration"'

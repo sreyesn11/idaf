@@ -108,6 +108,12 @@ class DiscoveryRunEvidence(BaseModel):
     ignored: int = 0
     errors: list[str] = Field(default_factory=list)
     results: list[DiscoveryRunResultItem] = Field(default_factory=list)
+    # Populated only for real collectors that expose `last_run_stats` (e.g.
+    # WindowsNeighborCollector) — always None for the simulated fixture.
+    interface: dict[str, Any] | None = None
+    raw_ipv4_neighbors: int | None = None
+    raw_ipv6_neighbors: int | None = None
+    filtered_entries: int | None = None
 
 
 class MergePreview(BaseModel):

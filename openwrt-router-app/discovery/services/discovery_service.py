@@ -89,6 +89,7 @@ class DiscoveryService:
             raw_observations = collector.collect()
         except DiscoveryFixtureError as exc:
             finished_at = datetime.now().astimezone()
+            stats = getattr(collector, "last_run_stats", None) or {}
             evidence = DiscoveryRunEvidence(
                 execution_id=execution_id,
                 collector=str(collector.collector_type.value),
@@ -96,6 +97,7 @@ class DiscoveryService:
                 started_at=started_at,
                 finished_at=finished_at,
                 errors=[exc.friendly_message if exc.detail is None else f"{exc.friendly_message} ({exc.detail})"],
+                **stats,
             )
             self._write_evidence(evidence)
             return evidence
@@ -106,70 +108,81 @@ class DiscoveryService:
         pending_links: list[tuple[str, int, ObservationType]] = []
 
         for raw in raw_observations:
-            normalized = normalize_observation(raw)
-            errors.extend(normalized.normalization_errors)
-            if not normalized.normalization_errors:
-                observations_normalized += 1
+            try:
+                normalized = normalize_observation(raw)
+                errors.extend(normalized.normalization_errors)
+                if not normalized.normalization_errors:
+                    observations_normalized += 1
 
-            resolution = self._resolver.resolve(normalized)
-            device_id: int | None = None
-            device_name: str | None = None
+                resolution = self._resolver.resolve(normalized)
+                device_id: int | None = None
+                device_name: str | None = None
 
-            if resolution.status == CorrelationStatus.MATCHED_DEVICE:
-                device_id = resolution.resolved_device_id
-                self._devices.touch_last_seen(device_id, normalized.observed_at)
-                self._persist_evidence_for_device(device_id, normalized)
-                device = self._devices.get_by_id(device_id)
-                device_name = device.name if device else None
-                devices_updated += 1
-            elif resolution.status in (CorrelationStatus.NEW_DEVICE, CorrelationStatus.POSSIBLE_DUPLICATE):
-                device_id = self._create_pending_device(normalized)
-                self._persist_evidence_for_device(device_id, normalized)
-                device = self._devices.get_by_id(device_id)
-                device_name = device.name if device else None
-                devices_created += 1
-                if resolution.status == CorrelationStatus.POSSIBLE_DUPLICATE:
-                    possible_duplicates += 1
-            elif resolution.status == CorrelationStatus.IDENTITY_CONFLICT:
-                identity_conflicts += 1
-            else:  # INSUFFICIENT_EVIDENCE
-                ignored += 1
+                if resolution.status == CorrelationStatus.MATCHED_DEVICE:
+                    device_id = resolution.resolved_device_id
+                    self._devices.touch_last_seen(device_id, normalized.observed_at)
+                    self._persist_evidence_for_device(device_id, normalized)
+                    device = self._devices.get_by_id(device_id)
+                    device_name = device.name if device else None
+                    devices_updated += 1
+                elif resolution.status in (CorrelationStatus.NEW_DEVICE, CorrelationStatus.POSSIBLE_DUPLICATE):
+                    device_id = self._create_pending_device(normalized)
+                    self._persist_evidence_for_device(device_id, normalized)
+                    device = self._devices.get_by_id(device_id)
+                    device_name = device.name if device else None
+                    devices_created += 1
+                    if resolution.status == CorrelationStatus.POSSIBLE_DUPLICATE:
+                        possible_duplicates += 1
+                elif resolution.status == CorrelationStatus.IDENTITY_CONFLICT:
+                    identity_conflicts += 1
+                else:  # INSUFFICIENT_EVIDENCE
+                    ignored += 1
 
-            if device_id is not None and normalized.parent_hostname:
-                pending_links.append((normalized.parent_hostname, device_id, normalized.observation_type))
+                if device_id is not None and normalized.parent_hostname:
+                    pending_links.append((normalized.parent_hostname, device_id, normalized.observation_type))
 
-            self._observations.save(
-                collector_id=normalized.collector_id,
-                collector_type=normalized.collector_type,
-                observed_at=normalized.observed_at,
-                observation_type=normalized.observation_type,
-                source=normalized.source,
-                raw_payload_json=json.dumps(normalized.raw_payload, ensure_ascii=False, default=str),
-                normalized_payload_json=normalized.model_dump_json(),
-                confidence=resolution.confidence,
-                correlation_status=resolution.status,
-                resolved_device_id=device_id,
-            )
-
-            results.append(
-                DiscoveryRunResultItem(
+                self._observations.save(
+                    collector_id=normalized.collector_id,
+                    collector_type=normalized.collector_type,
+                    observed_at=normalized.observed_at,
                     observation_type=normalized.observation_type,
                     source=normalized.source,
-                    correlation_status=resolution.status,
+                    raw_payload_json=json.dumps(normalized.raw_payload, ensure_ascii=False, default=str),
+                    normalized_payload_json=normalized.model_dump_json(),
                     confidence=resolution.confidence,
-                    device_id=device_id,
-                    device_name=device_name,
-                    notes=resolution.notes,
+                    correlation_status=resolution.status,
+                    resolved_device_id=device_id,
                 )
-            )
+
+                results.append(
+                    DiscoveryRunResultItem(
+                        observation_type=normalized.observation_type,
+                        source=normalized.source,
+                        correlation_status=resolution.status,
+                        confidence=resolution.confidence,
+                        device_id=device_id,
+                        device_name=device_name,
+                        notes=resolution.notes,
+                    )
+                )
+            except Exception:  # noqa: BLE001 - one bad observation must never abort the whole run (spec section 3)
+                logger.exception(
+                    "Error inesperado procesando una observación de descubrimiento source=%s tipo=%s",
+                    raw.source,
+                    raw.observation_type.value,
+                )
+                errors.append(
+                    f"No fue posible procesar la observación de '{raw.source}' ({raw.observation_type.value})."
+                )
 
         for parent_hostname, child_device_id, observation_type in pending_links:
             self._link_parent(parent_hostname, child_device_id, observation_type)
 
         finished_at = datetime.now().astimezone()
+        stats = getattr(collector, "last_run_stats", None) or {}
         evidence = DiscoveryRunEvidence(
             execution_id=execution_id,
-            collector=str(raw_observations[0].collector_type.value) if raw_observations else "unknown",
+            collector=str(collector.collector_type.value),
             fixture=fixture_name,
             started_at=started_at,
             finished_at=finished_at,
@@ -182,6 +195,7 @@ class DiscoveryService:
             ignored=ignored,
             errors=errors,
             results=results,
+            **stats,
         )
         evidence_path = self._write_evidence(evidence)
         logger.info(

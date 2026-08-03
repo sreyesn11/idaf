@@ -24,7 +24,7 @@ def test_list_available_fixtures_finds_lab_network() -> None:
 def test_collect_parses_all_observations() -> None:
     collector = SimulatedDiscoveryCollector(FIXTURE_PATH)
     observations = collector.collect()
-    assert len(observations) == 20
+    assert len(observations) == 22
     assert all(o.collector_id == "collector-lab-network" for o in observations)
 
 

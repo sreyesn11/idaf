@@ -248,6 +248,29 @@
         "device_type_hint": "IOT_NODE",
         "manufacturer_hint": "IDAF Lab"
       }
+    },
+    {
+      "observation_type": "GATEWAY_REPORT",
+      "source": "morse-micro-gw-self-report",
+      "observed_at": "2026-07-29T18:00:20-05:00",
+      "payload": {
+        "hostname": "ekh01-de87.lan",
+        "mac": "88-A2-9E-1C-DE-87",
+        "ipv4": "192.168.1.111",
+        "device_type_hint": "GATEWAY",
+        "manufacturer_hint": "Morse Micro"
+      }
+    },
+    {
+      "observation_type": "IPV6_NEIGHBOR",
+      "source": "router-ipv6-neighbors",
+      "observed_at": "2026-07-29T18:00:21-05:00",
+      "payload": {
+        "mac": "88-A2-9E-1C-DE-87",
+        "ipv6": [
+          "fe80::8aa2:9eff:fe1c:de87"
+        ]
+      }
     }
   ]
 }

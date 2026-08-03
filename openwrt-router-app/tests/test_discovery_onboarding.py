@@ -7,7 +7,8 @@ import pytest
 from core.exceptions import DiscoveryFixtureError
 from discovery.collectors.simulated import SimulatedDiscoveryCollector
 from discovery.correlation.merge_planner import MergePlanner
-from discovery.enums import DeviceDiscoveryStatus, DeviceManagementStatus, DeviceType
+from discovery.enums import DeviceDiscoveryStatus, DeviceManagementStatus, DeviceType, IdentifierType
+from discovery.normalization.validators import normalize_mac
 from discovery.repositories.address_repository import DeviceAddressRepository
 from discovery.repositories.identifier_repository import DeviceIdentifierRepository
 from discovery.repositories.interface_repository import DeviceInterfaceRepository
@@ -94,6 +95,53 @@ class TestDiscoveryServiceRun:
         discovery_service.run(SimulatedDiscoveryCollector(FIXTURE_PATH), fixture_name=FIXTURE_PATH.name)
         links = TopologyLinkRepository(engine=engine).list_all()
         assert len(links) >= 4  # gw1->esp32-01, gw1->esp32-02, gw2->esp32-03, gw2->monitor-luz
+
+    def test_morse_micro_dual_stack_gateway_is_a_single_device(
+        self, discovery_service: DiscoveryService, engine
+    ) -> None:
+        """Mandatory correlation case (audit prompt 02, section 4): the IPv4
+        192.168.1.111 and its link-local IPv6 fe80::8aa2:9eff:fe1c:de87, both
+        reported under MAC 88-A2-9E-1C-DE-87, must resolve to ONE device —
+        and stay distinct from 192.168.1.1 (a different MAC on the same /24).
+        """
+        discovery_service.run(SimulatedDiscoveryCollector(FIXTURE_PATH), fixture_name=FIXTURE_PATH.name)
+
+        identifier_repo = DeviceIdentifierRepository(engine=engine)
+        mac_identifier = identifier_repo.find_by_value(IdentifierType.MAC, normalize_mac("88-A2-9E-1C-DE-87"))
+        assert mac_identifier is not None
+        morse_micro_device_id = mac_identifier.device_id
+
+        address_repo = DeviceAddressRepository(engine=engine)
+        addresses = {a.address for a in address_repo.list_for_device(morse_micro_device_id)}
+        assert "192.168.1.111" in addresses
+        assert "fe80::8aa2:9eff:fe1c:de87" in addresses
+
+        openwrt_router_mac = identifier_repo.find_by_value(IdentifierType.MAC, normalize_mac("DE:AD:BE:EF:00:02"))
+        assert openwrt_router_mac is not None
+        assert openwrt_router_mac.device_id != morse_micro_device_id
+
+        devices = InventoryDeviceRepository(engine=engine).list_all()
+        morse_micro_devices = [d for d in devices if d.id == morse_micro_device_id]
+        assert len(morse_micro_devices) == 1
+
+    def test_run_continues_after_one_observation_raises_unexpectedly(
+        self, discovery_service: DiscoveryService, monkeypatch
+    ) -> None:
+        """spec section 3: an error processing one observation must not abort
+        the whole discovery run."""
+        original_resolve = discovery_service._resolver.resolve
+
+        def flaky_resolve(normalized):
+            if normalized.source == "openwrt-one-self-report":
+                raise RuntimeError("fallo inesperado simulando un bug de colector")
+            return original_resolve(normalized)
+
+        monkeypatch.setattr(discovery_service._resolver, "resolve", flaky_resolve)
+
+        evidence = discovery_service.run(SimulatedDiscoveryCollector(FIXTURE_PATH), fixture_name=FIXTURE_PATH.name)
+
+        assert evidence.devices_created > 0
+        assert any("openwrt-one-self-report" in error for error in evidence.errors)
 
 
 class TestOnboardingFlow:

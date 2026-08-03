@@ -8,6 +8,9 @@ from core.exceptions import RouterAppError
 from core.formatting import format_datetime
 from core.icons import ICONS
 from discovery.collectors.simulated import SimulatedDiscoveryCollector, list_available_fixtures
+from discovery.collectors.windows_commands import get_net_ip_configuration
+from discovery.collectors.windows_neighbor import WindowsNeighborCollector
+from discovery.config import load_discovery_config
 from discovery.correlation.merge_planner import MergePlanner
 from discovery.enums import AddressFamily, AddressScope, DeviceDiscoveryStatus, DeviceManagementStatus, DeviceType, IdentifierType
 from discovery.normalization.validators import normalize_hostname, normalize_ipv4, normalize_mac, normalize_thread_ext_address
@@ -90,6 +93,54 @@ _STATUS_LABELS = {
 }
 
 
+def _render_run_result(evidence) -> None:
+    if evidence.errors:
+        st.warning(f"El descubrimiento terminó con {len(evidence.errors)} advertencia(s) de normalización.")
+        with st.expander("Ver advertencias"):
+            for error in evidence.errors:
+                st.caption(f"{ICONS['warning']} {error}")
+    else:
+        st.success("Descubrimiento completado sin errores de normalización.")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Observaciones recibidas", evidence.observations_received)
+    col2.metric("Dispositivos creados", evidence.devices_created)
+    col3.metric("Dispositivos actualizados", evidence.devices_updated)
+    col4.metric("Conflictos de identidad", evidence.identity_conflicts)
+
+    if evidence.interface is not None:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Vecinos IPv4 crudos", evidence.raw_ipv4_neighbors)
+        col2.metric("Vecinos IPv6 crudos", evidence.raw_ipv6_neighbors)
+        col3.metric("Entradas filtradas", evidence.filtered_entries)
+
+    st.markdown(f"**{ICONS['list']} Detalle por observación**")
+    st.dataframe(
+        [
+            {
+                "Tipo": r.observation_type,
+                "Origen": r.source,
+                "Resultado": r.correlation_status,
+                "Confianza": round(r.confidence, 2),
+                "Dispositivo": r.device_name or "-",
+                "Notas": r.notes or "",
+            }
+            for r in evidence.results
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.download_button(
+        f"{ICONS['download']} Descargar evidencia JSON",
+        data=evidence.model_dump_json(indent=2),
+        file_name=f"{evidence.execution_id}.json",
+        mime="application/json",
+        key=f"download_evidence_{evidence.execution_id}",
+    )
+    st.caption(f"ID de ejecución: `{evidence.execution_id}`")
+
+
 def _device_table_rows(devices) -> list[dict]:
     return [
         {
@@ -168,57 +219,104 @@ with tab_summary:
 
 
 with tab_run:
-    st.subheader(f"{ICONS['play']} Ejecutar descubrimiento simulado")
-    fixtures = list_available_fixtures()
-    if not fixtures:
-        st.warning("No hay fixtures de descubrimiento disponibles en `discovery/collectors/fixtures/`.")
+    st.subheader(f"{ICONS['play']} Ejecutar descubrimiento")
+    source = st.radio(
+        "Fuente",
+        ["Descubrimiento simulado", "Descubrimiento local Windows"],
+        horizontal=True,
+    )
+
+    if source == "Descubrimiento simulado":
+        fixtures = list_available_fixtures()
+        if not fixtures:
+            st.warning("No hay fixtures de descubrimiento disponibles en `discovery/collectors/fixtures/`.")
+        else:
+            fixture_names = {f.name: f for f in fixtures}
+            selected_fixture_name = st.selectbox("Fixture de red simulada", list(fixture_names.keys()))
+
+            if st.button(f"{ICONS['play']} Ejecutar descubrimiento simulado", type="primary"):
+                with st.spinner("Recolectando, normalizando y correlacionando observaciones…"):
+                    collector = SimulatedDiscoveryCollector(fixture_names[selected_fixture_name])
+                    evidence = get_discovery_service().run(collector, fixture_name=selected_fixture_name)
+                _render_run_result(evidence)
+
     else:
-        fixture_names = {f.name: f for f in fixtures}
-        selected_fixture_name = st.selectbox("Fixture de red simulada", list(fixture_names.keys()))
+        discovery_config = load_discovery_config()
+        st.caption(
+            "Recolecta vecinos IPv4/IPv6 reales de la interfaz Ethernet configurada, vía PowerShell "
+            "(`Get-NetNeighbor`). Nunca inicia sesión SSH, nunca modifica un router, nunca hace un "
+            "barrido de la subred completa."
+        )
 
-        if st.button(f"{ICONS['play']} Ejecutar descubrimiento simulado", type="primary"):
-            with st.spinner("Recolectando, normalizando y correlacionando observaciones…"):
-                collector = SimulatedDiscoveryCollector(fixture_names[selected_fixture_name])
-                evidence = get_discovery_service().run(collector, fixture_name=selected_fixture_name)
+        interface_info = None
+        interface_error = None
+        if discovery_config.interface_index is None:
+            interface_error = "No hay `discovery.interface_index` configurado en `config/settings.yaml`."
+        else:
+            try:
+                interface_info = get_net_ip_configuration(
+                    discovery_config.interface_index, discovery_config.command_timeout_seconds
+                )
+            except Exception:
+                interface_error = (
+                    "No fue posible consultar la interfaz de red. Verifica que PowerShell esté disponible "
+                    "y que la sesión tenga permisos suficientes."
+                )
 
-            if evidence.errors:
-                st.warning(f"El descubrimiento terminó con {len(evidence.errors)} advertencia(s) de normalización.")
-                with st.expander("Ver advertencias"):
-                    for error in evidence.errors:
-                        st.caption(f"{ICONS['warning']} {error}")
-            else:
-                st.success("Descubrimiento completado sin errores de normalización.")
+        if interface_error:
+            st.error(interface_error)
+        elif interface_info is None:
+            st.warning(f"No se encontró la interfaz con índice {discovery_config.interface_index}.")
+        else:
+            alias_matches = str(interface_info.get("InterfaceAlias", "")).lower() == discovery_config.interface_alias.lower()
+            if not alias_matches:
+                st.warning(
+                    f"El índice configurado ya no corresponde al alias '{discovery_config.interface_alias}' "
+                    f"(ahora es '{interface_info.get('InterfaceAlias')}'). Actualiza "
+                    f"`discovery.interface_index` en `config/settings.yaml` antes de continuar."
+                )
+            if str(interface_info.get("Status", "")).lower() != "up":
+                st.warning("La interfaz configurada no está activa (`Status` distinto de `Up`).")
+            if not interface_info.get("IPv4Gateway"):
+                st.warning("La interfaz no reporta gateway IPv4 — puede no estar conectada a la red del laboratorio.")
 
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Observaciones recibidas", evidence.observations_received)
-            col2.metric("Dispositivos creados", evidence.devices_created)
-            col3.metric("Dispositivos actualizados", evidence.devices_updated)
-            col4.metric("Conflictos de identidad", evidence.identity_conflicts)
-
-            st.markdown(f"**{ICONS['list']} Detalle por observación**")
-            st.dataframe(
-                [
-                    {
-                        "Tipo": r.observation_type,
-                        "Origen": r.source,
-                        "Resultado": r.correlation_status,
-                        "Confianza": round(r.confidence, 2),
-                        "Dispositivo": r.device_name or "-",
-                        "Notas": r.notes or "",
-                    }
-                    for r in evidence.results
-                ],
-                use_container_width=True,
-                hide_index=True,
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Alias", interface_info.get("InterfaceAlias", "-"))
+            col2.metric("Índice", interface_info.get("InterfaceIndex", "-"))
+            col3.metric("Estado", interface_info.get("Status", "-"))
+            col1, col2, col3 = st.columns(3)
+            col1.metric("IPv4", interface_info.get("IPv4Address") or "-")
+            col2.metric("Gateway", interface_info.get("IPv4Gateway") or "-")
+            col3.metric("MAC", interface_info.get("MacAddress") or "-")
+            st.caption(
+                f"Adaptador: {interface_info.get('InterfaceDescription', '-')} · "
+                f"IPv6: {interface_info.get('IPv6Address') or '-'} · "
+                f"DNS: {interface_info.get('DNSServer') or '-'}"
             )
 
-            st.download_button(
-                f"{ICONS['download']} Descargar evidencia JSON",
-                data=evidence.model_dump_json(indent=2),
-                file_name=f"{evidence.execution_id}.json",
-                mime="application/json",
-            )
-            st.caption(f"ID de ejecución: `{evidence.execution_id}`")
+        allow_enrichment = st.checkbox(
+            "Permitir enriquecimiento activo (sondas de puerto, cabeceras HTTP, banner SSH)",
+            value=discovery_config.allow_active_enrichment,
+            help=(
+                "Necesario para clasificar el tipo de dispositivo (OpenWrt/Morse Micro/BeaglePlay). "
+                "Solo consulta puertos ya permitidos en `config/settings.yaml`; nunca abre una sesión SSH."
+            ),
+        )
+
+        run_disabled = interface_info is None or interface_error is not None
+        if st.button(f"{ICONS['play']} Ejecutar descubrimiento local", type="primary", disabled=run_disabled):
+            run_config = discovery_config.model_copy(update={"allow_active_enrichment": allow_enrichment})
+            evidence = None
+            with st.spinner("Recolectando vecinos IPv4/IPv6, filtrando y clasificando…"):
+                collector = WindowsNeighborCollector(run_config)
+                try:
+                    evidence = get_discovery_service().run(collector, fixture_name=None)
+                except RouterAppError as exc:
+                    st.error(exc.friendly_message)
+                except Exception:
+                    st.error("Ocurrió un error inesperado al ejecutar el descubrimiento local.")
+            if evidence is not None:
+                _render_run_result(evidence)
 
 
 with tab_pending:
